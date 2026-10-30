@@ -51,17 +51,16 @@
     this.$board.empty();
     this.$header = $('<div class="beergame-board-header"></div>');
     this.$notice = $('<div class="beergame-notice" role="status" aria-live="polite"></div>');
-    this.$week = $('<section class="beergame-panel beergame-week"></section>');
-    this.$transit = $('<section class="beergame-panel beergame-transit"></section>');
+    this.$week = $('<div class="beergame-week"></div>');
+    this.$transit = $('<p class="beergame-transit"></p>');
 
-    this.$form = $('<form class="beergame-order-form beergame-panel"></form>');
+    this.$form = $('<form class="beergame-order-form"></form>');
     this.$orderLabel = $('<label for="beergame-order-input"></label>');
-    this.$input = $('<input type="number" id="beergame-order-input" class="form-number" min="0" step="1" inputmode="numeric" required>');
+    this.$input = $('<input type="number" id="beergame-order-input" class="form-number" min="0" step="1" inputmode="numeric" required disabled>');
     this.$submit = $('<button type="submit" class="button button-primary"></button>').text(t('Place order'));
     this.$waiting = $('<p class="beergame-waiting"></p>');
     this.$error = $('<p class="beergame-error" role="alert" hidden></p>');
     this.$form.append(
-      $('<h2></h2>').text(t('Your order')),
       this.$orderLabel,
       $('<div class="beergame-order-row"></div>').append(this.$input, this.$submit),
       this.$error,
@@ -73,7 +72,12 @@
     });
 
     this.$history = $('<section class="beergame-panel beergame-history"></section>');
-    this.$board.append(this.$header, this.$notice, this.$week, this.$form, this.$transit, this.$history);
+    var $main = $('<section class="beergame-panel beergame-board-main"></section>').append(this.$week, this.$transit, this.$form);
+    this.$board.append(
+      this.$header,
+      this.$notice,
+      $('<div class="beergame-board-layout"></div>').append($main, this.$history)
+    );
   };
 
   /**
@@ -148,7 +152,7 @@
     }
 
     this.$header.empty().append(
-      $('<p class="beergame-role"></p>').text(state.roleLabel),
+      $('<h2 class="beergame-role"></h2>').text(state.roleLabel),
       $('<p class="beergame-meta"></p>').text(t('@team · Week @week of @weeks', {
         '@team': state.teamName,
         '@week': state.week || 1,
@@ -168,22 +172,22 @@
   BeerGameBoard.prototype.renderWeek = function (state) {
     var t = Backdrop.t;
     var p = state.position;
-    this.$week.empty().append($('<h2></h2>').text(t('This week')));
+    this.$week.empty();
     if (!p) {
       this.$week.append($('<p></p>').text(t('The game has not started yet. This page will update when your facilitator starts it.')));
       return;
     }
     var tiles = [
-      {label: t('Beer received from @who', {'@who': state.upstreamLabel}), value: p.delivered},
-      {label: state.role === 'retailer' ? t('Customers ordered') : t('Order from @who', {'@who': state.downstreamLabel}), value: p.incomingOrder},
-      {label: t('Shipped to @who', {'@who': state.downstreamLabel}), value: p.shipped},
-      {label: t('Inventory'), value: p.inventory, note: t('@cost per case', {'@cost': money(state.holdingCost)})},
-      {label: t('Backlog'), value: p.backlog, note: t('@cost per case', {'@cost': money(state.backlogCost)}), alert: p.backlog > 0},
-      {label: t('Cost this week'), value: money(p.costWeek), note: t('Total so far: @total', {'@total': money(p.costTotal)})}
+      {label: t('Received'), title: state.role === 'factory' ? t('Beer brewed this week') : t('Beer received from @who this week', {'@who': state.upstreamLabel}), value: p.delivered},
+      {label: t('Order in'), title: state.role === 'retailer' ? t('Customers ordered this week') : t('Order received from @who this week', {'@who': state.downstreamLabel}), value: p.incomingOrder},
+      {label: t('Shipped'), title: t('Beer shipped to @who this week', {'@who': state.downstreamLabel}), value: p.shipped},
+      {label: t('Inventory'), title: t('Cases in stock, costing @cost each per week', {'@cost': money(state.holdingCost)}), value: p.inventory, note: t('@cost/case', {'@cost': money(state.holdingCost)})},
+      {label: t('Backlog'), title: t('Cases owed to @who, costing @cost each per week', {'@who': state.downstreamLabel, '@cost': money(state.backlogCost)}), value: p.backlog, note: t('@cost/case', {'@cost': money(state.backlogCost)}), alert: p.backlog > 0},
+      {label: t('Cost'), title: t('Cost this week'), value: money(p.costWeek), note: t('Total @total', {'@total': money(p.costTotal)})}
     ];
     var $tiles = $('<div class="beergame-tiles"></div>');
     tiles.forEach(function (tile) {
-      var $tile = $('<div class="beergame-tile"></div>').toggleClass('is-alert', !!tile.alert);
+      var $tile = $('<div class="beergame-tile"></div>').attr('title', tile.title).toggleClass('is-alert', !!tile.alert);
       $tile.append(
         $('<span class="beergame-tile-label"></span>').text(tile.label),
         $('<span class="beergame-tile-value"></span>').text(tile.value)
@@ -202,19 +206,19 @@
   BeerGameBoard.prototype.renderTransit = function (state) {
     var t = Backdrop.t;
     var p = state.position;
-    this.$transit.empty();
+    this.$transit.empty().prop('hidden', !p);
     if (!p) {
       return;
     }
-    this.$transit.append($('<h2></h2>').text(state.role === 'factory' ? t('Beer being brewed') : t('Beer on the way to you')));
-    var $list = $('<ol class="beergame-transit-list"></ol>');
+    this.$transit.attr('title', state.role === 'factory' ?
+      t('Beer being brewed, and when it will be ready.') :
+      t('Beer on the way to you, and when it arrives. Beer you have ordered but that has not yet been shipped is not shown.'));
     p.inTransit.forEach(function (cases, index) {
-      $list.append($('<li></li>').append(
-        $('<span class="beergame-transit-when"></span>').text(index === 0 ? t('Next week') : t('In @n weeks', {'@n': index + 1})),
-        $('<span class="beergame-transit-cases"></span>').text(Backdrop.formatPlural(cases, '1 case', '@count cases'))
+      this.$transit.append($('<span class="beergame-transit-chip"></span>').append(
+        document.createTextNode((index === 0 ? t('Next week:') : t('In @n weeks:', {'@n': index + 1})) + ' '),
+        $('<strong></strong>').text(cases)
       ));
-    });
-    this.$transit.append($list, $('<p class="description"></p>').text(t('Beer you have ordered but that has not yet been shipped is not shown.')));
+    }, this);
   };
 
   /**
@@ -224,10 +228,14 @@
     var t = Backdrop.t;
     var canOrder = state.position && state.gameStatus === 'running' && state.teamStatus === 'playing' && state.pendingOrder === null;
     this.$orderLabel.text(state.role === 'factory' ?
-      t('How many cases should the brewery start brewing?') :
-      t('How many cases will you order from @who?', {'@who': state.upstreamLabel}));
+      t('Cases to brew') :
+      t('Order from @who', {'@who': state.upstreamLabel}));
+    var couldOrder = !this.$input.prop('disabled');
     this.$input.prop('disabled', !canOrder);
     this.$submit.prop('disabled', !canOrder);
+    if (canOrder && !couldOrder) {
+      this.$input[0].focus({preventScroll: true});
+    }
 
     var message = '';
     if (state.teamStatus === 'finished' || state.gameStatus === 'finished') {
@@ -270,7 +278,7 @@
     }
     var $table = $('<table class="beergame-history-table"></table>');
     var $head = $('<tr></tr>');
-    [t('Week'), t('Received'), t('Incoming order'), t('Shipped'), t('Inventory'), t('Backlog'), t('You ordered'), t('Cost')].forEach(function (label) {
+    [t('Week'), t('Received'), t('Order in'), t('Shipped'), t('Inventory'), t('Backlog'), t('Ordered'), t('Cost')].forEach(function (label) {
       $head.append($('<th></th>').text(label));
     });
     $table.append($('<thead></thead>').append($head));

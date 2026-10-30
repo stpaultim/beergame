@@ -89,7 +89,7 @@ class BeerGameEngineTestCase extends BackdropUnitTestCase {
     $this->assertEqual(array_slice($engine->demandSchedule('growth'), 4, 7), array(5, 5, 5, 6, 6, 6, 7), 'Growth rises one case every three weeks.');
     $this->assertEqual(max($engine->demandSchedule('growth')), 12, 'Growth levels off 8 above the start.');
     $this->assertEqual(array_slice($engine->demandSchedule('seasonal'), 4, 13), array(4, 5, 6, 8, 10, 11, 12, 11, 10, 8, 6, 5, 4), 'The seasonal wave peaks at 12 and returns to 4 over 12 weeks.');
-    $this->assertEqual(array_slice($engine->demandSchedule('promotion'), 4, 8), array(4, 4, 12, 12, 12, 12, 4, 4), 'The promotion lasts four weeks.');
+    $this->assertEqual(array_slice($engine->demandSchedule('promotion'), 4, 6), array(12, 12, 12, 12, 4, 4), 'The promotion starts in week 5 and lasts four weeks.');
     $noisy = array_slice($engine->demandSchedule('noisy'), 4);
     $this->assertTrue(min($noisy) >= 4 && max($noisy) <= 8, 'Noisy demand stays within 2 of 6.');
 

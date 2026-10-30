@@ -90,6 +90,13 @@ function beergame_menu() {
     'type' => MENU_CALLBACK,
     'file' => 'beergame.pages.inc',
   );
+  $items['beergame/demand-preview'] = array(
+    'page callback' => 'beergame_demand_preview_callback',
+    'delivery callback' => 'backdrop_json_deliver',
+    'access callback' => 'beergame_facilitator_access',
+    'type' => MENU_CALLBACK,
+    'file' => 'beergame.pages.inc',
+  );
   $items['beergame/%beergame_game'] = array(
     'title callback' => 'entity_label',
     'title arguments' => array('beergame_game', 1),
@@ -332,9 +339,26 @@ function beergame_demand_scenarios() {
     ),
     'surprise' => array(
       'label' => t('Surprise me'),
-      'description' => t('One of the first five scenarios is picked at random when the game starts, and kept secret until the results.'),
+      'description' => t('Any of the scenarios above is picked at random when the game starts, and kept secret until the results.'),
     ),
   );
+}
+
+/**
+ * Returns the label of the demand scenario a game uses.
+ *
+ * @param BeerGame $game
+ *   The game.
+ *
+ * @return string
+ *   The scenario label. For a surprise game that has not started, "Surprise
+ *   me", since no scenario has been picked yet.
+ */
+function beergame_demand_scenario_label(BeerGame $game) {
+  $settings = $game->engine()->getSettings();
+  $scenarios = beergame_demand_scenarios();
+  $scenario = empty($settings['demand_scenario']) ? $settings['demand_pattern'] : $settings['demand_scenario'];
+  return isset($scenarios[$scenario]) ? $scenarios[$scenario]['label'] : $scenarios['step']['label'];
 }
 
 /**

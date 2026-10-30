@@ -76,7 +76,7 @@ class BeerGameEngine {
       'holding_cost' => 0.5,
       'backlog_cost' => 1.0,
       'announced_weeks' => 50,
-      'end_week' => 36,
+      'end_week' => 40,
     );
   }
 
@@ -117,7 +117,7 @@ class BeerGameEngine {
    *   Scenario keys.
    */
   public static function surpriseScenarios() {
-    return array('step', 'growth', 'seasonal', 'promotion', 'noisy');
+    return array('step', 'growth', 'seasonal', 'promotion', 'noisy', 'random');
   }
 
   /**
@@ -132,7 +132,8 @@ class BeerGameEngine {
    * - step: jumps once to the step level (the classic game).
    * - growth: rises by one case every three weeks, up to 8 above the start.
    * - seasonal: a smooth wave between the start and 8 above it, every 12 weeks.
-   * - promotion: a four-week burst 8 above the start, then back again.
+   * - promotion: a four-week burst 8 above the start, starting in the week
+   *   demand starts to change, then back again.
    * - noisy: bounces randomly within 2 of a level 2 above the start.
    * - random: drifts up or down by up to the variation each week.
    *
@@ -170,7 +171,7 @@ class BeerGameEngine {
             break;
 
           case 'promotion':
-            $demand = ($k >= 2 && $k <= 5) ? $base + 8 : $base;
+            $demand = $k <= 3 ? $base + 8 : $base;
             break;
 
           case 'noisy':

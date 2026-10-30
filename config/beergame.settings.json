@@ -16,6 +16,6 @@
     "holding_cost": 0.5,
     "backlog_cost": 1,
     "announced_weeks": 50,
-    "end_week": 36,
+    "end_week": 40,
     "poll_interval": 3
 }

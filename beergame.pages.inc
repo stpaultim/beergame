@@ -5,6 +5,37 @@
  */
 
 /**
+ * JSON callback: previews the customer demand for unsaved settings.
+ *
+ * Reads the settings from the query string, so facilitators can see the
+ * effect of the demand settings as they change them.
+ */
+function beergame_demand_preview_callback() {
+  $settings = beergame_default_settings();
+  $scenario = isset($_GET['demand_pattern']) && is_string($_GET['demand_pattern']) ? $_GET['demand_pattern'] : 'step';
+  if (!isset(beergame_demand_scenarios()[$scenario])) {
+    return MENU_NOT_FOUND;
+  }
+  if ($scenario == 'surprise') {
+    return array('surprise' => TRUE, 'demand' => array());
+  }
+  $keys = array('demand_initial', 'demand_step', 'demand_step_week', 'demand_variation', 'demand_min', 'demand_max', 'end_week');
+  foreach ($keys as $key) {
+    if (isset($_GET[$key]) && is_numeric($_GET[$key])) {
+      // Keep values in a sensible range so the preview stays cheap.
+      $settings[$key] = max(0, min(200, (int) $_GET[$key]));
+    }
+  }
+  $settings['end_week'] = max(1, $settings['end_week']);
+  $engine = new BeerGameEngine($settings);
+  return array(
+    'surprise' => FALSE,
+    'sample' => in_array($scenario, array('noisy', 'random')),
+    'demand' => $engine->demandSchedule($scenario, $settings['end_week']),
+  );
+}
+
+/**
  * Page callback: lists the games the current person plays or facilitates.
  */
 function beergame_list_page() {
@@ -36,6 +67,9 @@ function beergame_list_page() {
       $role_labels[$record->role],
       $status_labels[$game->status],
       $record->week ? $record->week : '-',
+      // Knowing the scenario would give the game away, so players only see
+      // it once the game is over.
+      $game->status == 'finished' ? beergame_demand_scenario_label($game) : t('Revealed at the end'),
       isset($record->position_cost) ? '$' . number_format($record->position_cost, 2) : '-',
       isset($record->team_cost) ? '$' . number_format($record->team_cost, 2) : '-',
       implode(' · ', $links),
@@ -45,7 +79,7 @@ function beergame_list_page() {
     $build['playing'] = array(
       '#theme' => 'table',
       '#caption' => t('Games you are playing'),
-      '#header' => array(t('Game'), t('Played'), t('Team'), t('Position'), t('Status'), t('Week'), t('Your cost'), t('Team cost'), t('Operations')),
+      '#header' => array(t('Game'), t('Played'), t('Team'), t('Position'), t('Status'), t('Week'), t('Scenario'), t('Your cost'), t('Team cost'), t('Operations')),
       '#rows' => $rows,
       '#empty' => t('You have not been given a position in any game yet. Your facilitator will add you to a team.'),
     );
@@ -111,11 +145,25 @@ function beergame_settings_elements(array $settings) {
     '#title' => t('Customer demand'),
     '#description' => t('Only the retailer ever sees customer demand.'),
   );
+  // The scenario choice sits on the left and its settings on the right.
+  // Markup wrappers are used rather than containers so the submitted values
+  // keep their flat structure.
+  $scenario_is = function (array $scenarios) {
+    $values = array();
+    foreach ($scenarios as $scenario) {
+      $values[] = array('value' => $scenario);
+    }
+    return array(
+      'visible' => array(':input[name$="[demand_pattern]"]' => $values),
+    );
+  };
   $elements['demand']['demand_pattern'] = array(
     '#type' => 'radios',
     '#title' => t('Demand scenario'),
     '#options' => array(),
     '#default_value' => $settings['demand_pattern'],
+    '#prefix' => '<div class="beergame-demand-layout"><div class="beergame-demand-choice">',
+    '#suffix' => '</div><div class="beergame-demand-options"><h3 class="beergame-demand-options-title">' . t('Scenario settings') . '</h3>',
   );
   foreach (beergame_demand_scenarios() as $key => $scenario) {
     $elements['demand']['demand_pattern']['#options'][$key] = $scenario['label'];
@@ -132,29 +180,51 @@ function beergame_settings_elements(array $settings) {
   ) + $integer;
   $elements['demand']['demand_step'] = array(
     '#title' => t('Cases per week after the step'),
+    '#description' => t('Used by Classic step, including when Surprise me picks it.'),
     '#default_value' => $settings['demand_step'],
-    '#states' => array(
-      'visible' => array(':input[name$="[demand_pattern]"]' => array('value' => 'step')),
-    ),
+    '#states' => $scenario_is(array('step', 'surprise')),
   ) + $integer;
   $elements['demand']['demand_variation'] = array(
     '#title' => t('Largest change per week (cases)'),
-    '#description' => t('Each week demand rises or falls by a random amount up to this many cases.'),
+    '#description' => t('Used by Random drift, including when Surprise me picks it. Each week demand rises or falls by a random amount up to this many cases.'),
     '#default_value' => $settings['demand_variation'],
-    '#states' => array(
-      'visible' => array(':input[name$="[demand_pattern]"]' => array('value' => 'random')),
-    ),
+    '#states' => $scenario_is(array('random', 'surprise')),
   ) + $integer;
   $elements['demand']['demand_min'] = array(
     '#title' => t('Lowest demand (cases per week)'),
-    '#description' => t('Every scenario is kept between the lowest and highest demand.'),
+    '#description' => t('Demand always stays between the lowest and highest demand.'),
     '#default_value' => $settings['demand_min'],
   ) + $integer;
   $elements['demand']['demand_max'] = array(
     '#title' => t('Highest demand (cases per week)'),
     '#default_value' => $settings['demand_max'],
     '#min' => 1,
+    '#suffix' => '<div class="beergame-demand-preview" aria-live="polite"></div></div></div>',
   ) + $integer;
+  $path = backdrop_get_path('module', 'beergame');
+  $elements['demand']['#attached'] = array(
+    'library' => array(array('system', 'jquery.once')),
+    'js' => array(
+      $path . '/js/beergame.chart.js',
+      $path . '/js/beergame.preview.js',
+      array(
+        'type' => 'setting',
+        'data' => array(
+          'beergamePreview' => array(
+            'url' => url('beergame/demand-preview'),
+            'labels' => array(
+              'title' => t('Preview: customer demand'),
+              'demand' => t('Customer orders'),
+              'week' => t('Week'),
+              'sample' => t('One possible run. The actual demand is drawn at random when the game starts.'),
+              'surprise' => t('A scenario is picked at random when the game starts, so there is nothing to preview.'),
+              'error' => t('The preview could not be loaded.'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 
   $elements['length'] = array(
     '#type' => 'fieldset',
@@ -1010,6 +1080,7 @@ function beergame_results_page(BeerGame $game) {
     '#summary' => t('Reveal what customers actually ordered'),
     '#details' => '<p>' . t('Before opening this, ask everyone except the retailers to sketch what they think customer demand looked like.') . '</p><p><strong>' . beergame_demand_summary($game) . '</strong></p><div id="beergame-demand-chart" class="beergame-chart"></div>',
   );
+  $build['#attached']['js'][] = backdrop_get_path('module', 'beergame') . '/js/beergame.chart.js';
   $build['#attached']['js'][] = backdrop_get_path('module', 'beergame') . '/js/beergame.results.js';
   $build['#attached']['library'][] = array('system', 'jquery.once');
   $build['#attached']['js'][] = array(
