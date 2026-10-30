@@ -1,0 +1,5 @@
+[BeerGameEngineTestCase]
+name = Beer Game engine
+description = Tests the Beer Game simulation engine.
+group = Beer Game
+file = beergame.test

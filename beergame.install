@@ -1,0 +1,237 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the Beer Game module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function beergame_schema() {
+  $schema['beergame_game'] = array(
+    'description' => 'Beer Game sessions run by a facilitator.',
+    'fields' => array(
+      'gid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Primary key: game ID.',
+      ),
+      'title' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Name of the game session.',
+      ),
+      'uid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The facilitator who created the game.',
+      ),
+      'status' => array(
+        'type' => 'varchar',
+        'length' => 16,
+        'not null' => TRUE,
+        'default' => 'setup',
+        'description' => 'One of setup, running, paused or finished.',
+      ),
+      'settings' => array(
+        'type' => 'blob',
+        'size' => 'big',
+        'not null' => FALSE,
+        'serialize' => TRUE,
+        'description' => 'Serialized game settings (delays, demand, costs).',
+      ),
+      'created' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Unix timestamp when the game was created.',
+      ),
+      'changed' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Unix timestamp when the game was last saved.',
+      ),
+    ),
+    'primary key' => array('gid'),
+    'indexes' => array(
+      'uid' => array('uid'),
+      'status' => array('status'),
+    ),
+  );
+
+  $schema['beergame_team'] = array(
+    'description' => 'Teams (supply chains) within a Beer Game session.',
+    'fields' => array(
+      'tid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Primary key: team ID.',
+      ),
+      'gid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The game this team belongs to.',
+      ),
+      'name' => array(
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Team (brewery) name.',
+      ),
+      'week' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The week awaiting orders; 0 before the game starts.',
+      ),
+      'status' => array(
+        'type' => 'varchar',
+        'length' => 16,
+        'not null' => TRUE,
+        'default' => 'ready',
+        'description' => 'One of ready, playing or finished.',
+      ),
+      'state' => array(
+        'type' => 'blob',
+        'size' => 'big',
+        'not null' => FALSE,
+        'serialize' => TRUE,
+        'description' => 'Serialized simulation state from BeerGameEngine.',
+      ),
+      'changed' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Unix timestamp of the last change.',
+      ),
+    ),
+    'primary key' => array('tid'),
+    'indexes' => array(
+      'gid' => array('gid'),
+    ),
+  );
+
+  $schema['beergame_position'] = array(
+    'description' => 'The person (or computer) playing each role on a team.',
+    'fields' => array(
+      'tid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The team.',
+      ),
+      'role' => array(
+        'type' => 'varchar',
+        'length' => 16,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'retailer, wholesaler, distributor or factory.',
+      ),
+      'uid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The person playing; 0 for a computer player.',
+      ),
+      'pending_order' => array(
+        'type' => 'int',
+        'not null' => FALSE,
+        'description' => 'Order placed for the current week, NULL if not yet placed.',
+      ),
+    ),
+    'primary key' => array('tid', 'role'),
+    'indexes' => array(
+      'uid' => array('uid'),
+    ),
+  );
+
+  $schema['beergame_log'] = array(
+    'description' => 'Week-by-week history of each position, used for the debrief.',
+    'fields' => array(
+      'tid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The team.',
+      ),
+      'role' => array(
+        'type' => 'varchar',
+        'length' => 16,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The role.',
+      ),
+      'week' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The week number.',
+      ),
+      'incoming_order' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Order received from downstream (customer demand for the retailer).',
+      ),
+      'delivered' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Cases received from upstream (or brewed, for the factory).',
+      ),
+      'shipped' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Cases shipped downstream.',
+      ),
+      'inventory' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Inventory at the end of the week.',
+      ),
+      'backlog' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Backlog at the end of the week.',
+      ),
+      'order_placed' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Order placed upstream this week.',
+      ),
+      'cost' => array(
+        'type' => 'float',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Cost incurred this week.',
+      ),
+      'computer' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Whether the order was placed by a computer player.',
+      ),
+    ),
+    'primary key' => array('tid', 'role', 'week'),
+  );
+
+  return $schema;
+}

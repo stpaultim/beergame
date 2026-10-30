@@ -1,0 +1,21 @@
+{
+    "_config_name": "beergame.settings",
+    "starting_inventory": 12,
+    "pipeline_initial": 4,
+    "order_delay": 2,
+    "shipping_delay": 2,
+    "production_request_delay": 1,
+    "production_delay": 2,
+    "demand_pattern": "step",
+    "demand_initial": 4,
+    "demand_step": 8,
+    "demand_step_week": 5,
+    "demand_variation": 2,
+    "demand_min": 1,
+    "demand_max": 15,
+    "holding_cost": 0.5,
+    "backlog_cost": 1,
+    "announced_weeks": 50,
+    "end_week": 36,
+    "poll_interval": 3
+}

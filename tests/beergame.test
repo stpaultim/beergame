@@ -1,0 +1,125 @@
+<?php
+/**
+ * @file
+ * Tests for the Beer Game module.
+ */
+
+/**
+ * Tests the simulation engine without a database.
+ */
+class BeerGameEngineTestCase extends BackdropUnitTestCase {
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setUp() {
+    parent::setUp();
+    require_once BACKDROP_ROOT . '/' . backdrop_get_path('module', 'beergame') . '/includes/BeerGameEngine.php';
+  }
+
+  /**
+   * Steady orders with steady demand keep every position in balance.
+   */
+  public function testEquilibrium() {
+    $engine = new BeerGameEngine(array('demand_step' => 4));
+    $state = $engine->initialState();
+    $orders = array_fill_keys(BeerGameEngine::ROLES, 4);
+    for ($week = 1; $week < 30; $week++) {
+      $state = $engine->advance($state, $orders);
+    }
+    $this->assertEqual($state['week'], 30, 'The game advanced to week 30.');
+    foreach ($state['positions'] as $role => $position) {
+      $this->assertEqual($position['inventory'], 12, format_string('@role inventory stays at 12.', array('@role' => $role)));
+      $this->assertEqual($position['backlog'], 0, format_string('@role has no backlog.', array('@role' => $role)));
+      $this->assertEqual($position['cost_total'], 30 * 6, format_string('@role pays $6 a week.', array('@role' => $role)));
+    }
+  }
+
+  /**
+   * The step in demand is felt first by the retailer.
+   */
+  public function testDemandStep() {
+    $engine = new BeerGameEngine();
+    $this->assertEqual($engine->demand(4), 4, 'Demand is 4 before the step.');
+    $this->assertEqual($engine->demand(5), 8, 'Demand is 8 from week 5.');
+
+    $state = $engine->initialState();
+    $orders = array_fill_keys(BeerGameEngine::ROLES, 4);
+    for ($week = 1; $week < 7; $week++) {
+      $state = $engine->advance($state, $orders);
+    }
+    // Weeks 5, 6 and 7 each take 4 extra cases from the retailer's stock.
+    $this->assertEqual($state['positions']['retailer']['inventory'], 0, 'The retailer has run out by week 7.');
+    $this->assertEqual($state['positions']['wholesaler']['inventory'], 12, 'The wholesaler has not yet seen the change.');
+  }
+
+  /**
+   * Random demand holds steady, then moves by at most the variation.
+   */
+  public function testRandomDemand() {
+    $engine = new BeerGameEngine(array('demand_variation' => 3, 'demand_initial' => 2));
+    $schedule = $engine->demandSchedule('random');
+    $this->assertEqual(count($schedule), 50, 'A schedule covers the announced weeks.');
+    for ($week = 1; $week < 5; $week++) {
+      $this->assertEqual($schedule[$week - 1], 2, format_string('Demand is steady in week @week.', array('@week' => $week)));
+    }
+    $valid = TRUE;
+    for ($i = 4; $i < 50; $i++) {
+      $change = abs($schedule[$i] - $schedule[$i - 1]);
+      $valid = $valid && $schedule[$i] >= 1 && $schedule[$i] <= 15 && $change <= 3;
+    }
+    $this->assertTrue($valid, 'Demand never changes by more than 3 a week and stays between 1 and 15.');
+
+    $engine = new BeerGameEngine(array('demand_schedule' => array(4, 4, 4, 4, 6, 3)));
+    $this->assertEqual($engine->demand(5), 6, 'Demand follows the stored schedule.');
+    $this->assertEqual($engine->demand(6), 3, 'Demand follows the stored schedule.');
+  }
+
+  /**
+   * Every scenario starts steady and stays within the demand limits.
+   */
+  public function testScenarios() {
+    $engine = new BeerGameEngine();
+    foreach (array('step', 'growth', 'seasonal', 'promotion', 'noisy', 'random') as $scenario) {
+      $schedule = $engine->demandSchedule($scenario);
+      $this->assertEqual(array_slice($schedule, 0, 4), array(4, 4, 4, 4), format_string('@scenario is steady at 4 for the first four weeks.', array('@scenario' => $scenario)));
+      $this->assertTrue(min($schedule) >= 1 && max($schedule) <= 15, format_string('@scenario stays between 1 and 15.', array('@scenario' => $scenario)));
+    }
+    $this->assertEqual(array_slice($engine->demandSchedule('step'), 4, 3), array(8, 8, 8), 'The classic step jumps to 8 at week 5.');
+    $this->assertEqual(array_slice($engine->demandSchedule('growth'), 4, 7), array(5, 5, 5, 6, 6, 6, 7), 'Growth rises one case every three weeks.');
+    $this->assertEqual(max($engine->demandSchedule('growth')), 12, 'Growth levels off 8 above the start.');
+    $this->assertEqual(array_slice($engine->demandSchedule('seasonal'), 4, 13), array(4, 5, 6, 8, 10, 11, 12, 11, 10, 8, 6, 5, 4), 'The seasonal wave peaks at 12 and returns to 4 over 12 weeks.');
+    $this->assertEqual(array_slice($engine->demandSchedule('promotion'), 4, 8), array(4, 4, 12, 12, 12, 12, 4, 4), 'The promotion lasts four weeks.');
+    $noisy = array_slice($engine->demandSchedule('noisy'), 4);
+    $this->assertTrue(min($noisy) >= 4 && max($noisy) <= 8, 'Noisy demand stays within 2 of 6.');
+
+    $engine = new BeerGameEngine(array('demand_initial' => 10));
+    $this->assertEqual(max($engine->demandSchedule('promotion')), 15, 'Demand is capped at the highest demand.');
+  }
+
+  /**
+   * Orders take the configured delays to arrive.
+   */
+  public function testDelays() {
+    $engine = new BeerGameEngine();
+    $state = $engine->initialState();
+    $orders = array_fill_keys(BeerGameEngine::ROLES, 4);
+    $orders['retailer'] = 10;
+    $state = $engine->advance($state, $orders);
+    $this->assertEqual($state['positions']['wholesaler']['incoming_order'], 4, 'The order has not arrived after one week.');
+    $state = $engine->advance($state, array_fill_keys(BeerGameEngine::ROLES, 4));
+    $this->assertEqual($state['positions']['wholesaler']['incoming_order'], 10, 'The order arrives after the two week order delay.');
+  }
+
+  /**
+   * The computer player orders steadily when the system is in balance.
+   */
+  public function testBotOrder() {
+    $engine = new BeerGameEngine(array('demand_step' => 4));
+    $state = $engine->initialState();
+    foreach (BeerGameEngine::ROLES as $role) {
+      $this->assertEqual($engine->botOrder($state, $role), 4, format_string('The computer @role orders 4 in balance.', array('@role' => $role)));
+    }
+  }
+
+}

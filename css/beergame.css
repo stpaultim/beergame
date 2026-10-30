@@ -1,0 +1,258 @@
+/**
+ * @file
+ * Styles for the Beer Game board, dashboard and results.
+ */
+
+.beergame-board,
+.beergame-charts,
+.beergame-chart,
+.beergame-monitor-table {
+  --beergame-surface: #fcfcfb;
+  --beergame-border: #dcdbd6;
+  --beergame-text: #0b0b0b;
+  --beergame-muted: #52514e;
+  --beergame-alert: #b42318;
+  --beergame-alert-bg: #fef3f2;
+  --beergame-ready: #067647;
+  --beergame-grid: #e8e7e3;
+  --beergame-retailer: #2a78d6;
+  --beergame-wholesaler: #eb6834;
+  --beergame-distributor: #1baf7a;
+  --beergame-factory: #eda100;
+  --beergame-demand: #2a78d6;
+}
+
+/* Player board. */
+.beergame-board {
+  display: grid;
+  gap: 1rem;
+  max-width: 60rem;
+}
+.beergame-board h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+}
+.beergame-board-header .beergame-role {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0;
+}
+.beergame-board-header .beergame-meta {
+  color: var(--beergame-muted);
+  margin: 0;
+}
+.beergame-notice:empty {
+  display: none;
+}
+.beergame-notice {
+  border-left: 4px solid var(--beergame-ready);
+  padding: 0.5rem 0.75rem;
+  background: #ecfdf3;
+}
+.beergame-panel {
+  background: var(--beergame-surface);
+  border: 1px solid var(--beergame-border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+.beergame-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.75rem;
+}
+.beergame-tile {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--beergame-border);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  background: #fff;
+}
+.beergame-tile.is-alert {
+  border-color: var(--beergame-alert);
+  background: var(--beergame-alert-bg);
+}
+.beergame-tile-label,
+.beergame-tile-note {
+  color: var(--beergame-muted);
+  font-size: 0.85rem;
+}
+.beergame-tile-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.beergame-tile.is-alert .beergame-tile-value {
+  color: var(--beergame-alert);
+}
+.beergame-order-form label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+.beergame-order-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.beergame-order-row input {
+  width: 7rem;
+  font-size: 1.25rem;
+}
+.beergame-error {
+  color: var(--beergame-alert);
+}
+.beergame-waiting {
+  color: var(--beergame-muted);
+  margin-bottom: 0;
+}
+.beergame-transit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.beergame-transit-list li {
+  display: flex;
+  flex-direction: column;
+  border: 1px dashed var(--beergame-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  min-width: 7rem;
+}
+.beergame-transit-when {
+  color: var(--beergame-muted);
+  font-size: 0.85rem;
+}
+.beergame-transit-cases {
+  font-weight: 700;
+}
+.beergame-table-scroll {
+  overflow-x: auto;
+}
+.beergame-history-table td,
+.beergame-history-table th {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Facilitator dashboard. */
+.beergame-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.beergame-badge-ready {
+  color: var(--beergame-ready);
+}
+.beergame-badge-waiting {
+  color: var(--beergame-muted);
+}
+.beergame-takeover {
+  font-size: 0.85rem;
+}
+.beergame-team-finished td {
+  color: var(--beergame-muted);
+}
+
+/* Results charts. */
+.beergame-team-charts {
+  margin-bottom: 2rem;
+}
+.beergame-chart {
+  margin: 0 0 1.5rem;
+  max-width: 48rem;
+}
+.beergame-chart-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+.beergame-legend {
+  list-style: none;
+  margin: 0 0 0.25rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  font-size: 0.9rem;
+}
+.beergame-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.beergame-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.beergame-swatch.beergame-series-retailer { background: var(--beergame-retailer); }
+.beergame-swatch.beergame-series-wholesaler { background: var(--beergame-wholesaler); }
+.beergame-swatch.beergame-series-distributor { background: var(--beergame-distributor); }
+.beergame-swatch.beergame-series-factory { background: var(--beergame-factory); }
+.beergame-swatch.beergame-series-demand { background: var(--beergame-demand); }
+.beergame-chart-plot {
+  position: relative;
+}
+.beergame-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: var(--beergame-surface);
+}
+.beergame-grid {
+  stroke: var(--beergame-grid);
+  stroke-width: 1;
+}
+.beergame-zero {
+  stroke: var(--beergame-muted);
+  stroke-width: 1;
+}
+.beergame-axis-label,
+.beergame-end-label {
+  fill: var(--beergame-muted);
+  font-size: 11px;
+}
+.beergame-end-label {
+  fill: var(--beergame-text);
+}
+.beergame-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.beergame-line.beergame-series-retailer { stroke: var(--beergame-retailer); }
+.beergame-line.beergame-series-wholesaler { stroke: var(--beergame-wholesaler); }
+.beergame-line.beergame-series-distributor { stroke: var(--beergame-distributor); }
+.beergame-line.beergame-series-factory { stroke: var(--beergame-factory); }
+.beergame-line.beergame-series-demand { stroke: var(--beergame-demand); }
+.beergame-crosshair {
+  stroke: var(--beergame-muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.beergame-tooltip {
+  position: absolute;
+  top: 8px;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid var(--beergame-border);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+.beergame-tooltip div {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}

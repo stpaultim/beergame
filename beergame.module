@@ -1,0 +1,739 @@
+<?php
+/**
+ * @file
+ * A multiplayer online version of the MIT Beer Distribution Game.
+ */
+
+/**
+ * Implements hook_autoload_info().
+ */
+function beergame_autoload_info() {
+  return array(
+    'BeerGameEngine' => 'includes/BeerGameEngine.php',
+    'BeerGame' => 'includes/BeerGame.php',
+    'BeerGameStorageController' => 'includes/BeerGame.php',
+  );
+}
+
+/**
+ * Implements hook_config_info().
+ */
+function beergame_config_info() {
+  $prefixes['beergame.settings'] = array(
+    'label' => t('Beer Game settings'),
+    'group' => t('Configuration'),
+  );
+  return $prefixes;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function beergame_permission() {
+  return array(
+    'administer beer games' => array(
+      'title' => t('Administer Beer Games'),
+      'description' => t('Manage all games and set the default game settings.'),
+      'restrict access' => TRUE,
+    ),
+    'facilitate beer games' => array(
+      'title' => t('Facilitate Beer Games'),
+      'description' => t('Create games, assign people to teams and run their own games.'),
+    ),
+    'play beer games' => array(
+      'title' => t('Play Beer Games'),
+      'description' => t('Play in games where a facilitator has assigned them a position.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_entity_info().
+ */
+function beergame_entity_info() {
+  return array(
+    'beergame_game' => array(
+      'label' => t('Beer Game'),
+      'entity class' => 'BeerGame',
+      'controller class' => 'BeerGameStorageController',
+      'base table' => 'beergame_game',
+      'fieldable' => FALSE,
+      'entity keys' => array(
+        'id' => 'gid',
+        'label' => 'title',
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function beergame_menu() {
+  $items['beergame'] = array(
+    'title' => 'Beer Game',
+    'page callback' => 'beergame_list_page',
+    'access callback' => 'beergame_list_access',
+    'file' => 'beergame.pages.inc',
+  );
+  $items['beergame/add'] = array(
+    'title' => 'Create a game',
+    'page callback' => 'beergame_game_add_page',
+    'access arguments' => array('facilitate beer games'),
+    'type' => MENU_LOCAL_ACTION,
+    'file' => 'beergame.pages.inc',
+  );
+  $items['beergame/autocomplete'] = array(
+    'page callback' => 'beergame_people_autocomplete',
+    'delivery callback' => 'backdrop_json_deliver',
+    'access callback' => 'beergame_facilitator_access',
+    'type' => MENU_CALLBACK,
+    'file' => 'beergame.pages.inc',
+  );
+  $items['beergame/%beergame_game'] = array(
+    'title callback' => 'entity_label',
+    'title arguments' => array('beergame_game', 1),
+    'page callback' => 'beergame_game_page',
+    'page arguments' => array(1),
+    'access callback' => 'beergame_game_access',
+    'access arguments' => array('view', 1),
+    'file' => 'beergame.pages.inc',
+  );
+  $items['beergame/%beergame_game/dashboard'] = array(
+    'title' => 'Dashboard',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
+  );
+  $items['beergame/%beergame_game/play'] = array(
+    'title' => 'Play',
+    'page callback' => 'beergame_board_page',
+    'page arguments' => array(1),
+    'access callback' => 'beergame_game_access',
+    'access arguments' => array('play', 1),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => -5,
+    'file' => 'beergame.pages.inc',
+  );
+  $items['beergame/%beergame_game/results'] = array(
+    'title' => 'Results',
+    'page callback' => 'beergame_results_page',
+    'page arguments' => array(1),
+    'access callback' => 'beergame_game_access',
+    'access arguments' => array('results', 1),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 0,
+    'file' => 'beergame.pages.inc',
+  );
+  $items['beergame/%beergame_game/edit'] = array(
+    'title' => 'Edit',
+    'page callback' => 'backdrop_get_form',
+    'page arguments' => array('beergame_game_form', 1),
+    'access callback' => 'beergame_game_access',
+    'access arguments' => array('update', 1),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 5,
+    'file' => 'beergame.pages.inc',
+  );
+  $items['beergame/%beergame_game/delete'] = array(
+    'title' => 'Delete',
+    'page callback' => 'backdrop_get_form',
+    'page arguments' => array('beergame_game_delete_form', 1),
+    'access callback' => 'beergame_game_access',
+    'access arguments' => array('delete', 1),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 10,
+    'file' => 'beergame.pages.inc',
+  );
+  $items['beergame/%beergame_game/board-state'] = array(
+    'page callback' => 'beergame_board_state_callback',
+    'page arguments' => array(1),
+    'delivery callback' => 'backdrop_json_deliver',
+    'access callback' => 'beergame_game_access',
+    'access arguments' => array('play', 1),
+    'type' => MENU_CALLBACK,
+    'file' => 'beergame.pages.inc',
+  );
+  $items['beergame/%beergame_game/order'] = array(
+    'page callback' => 'beergame_order_callback',
+    'page arguments' => array(1),
+    'delivery callback' => 'backdrop_json_deliver',
+    'access callback' => 'beergame_game_access',
+    'access arguments' => array('play', 1),
+    'type' => MENU_CALLBACK,
+    'file' => 'beergame.pages.inc',
+  );
+  $items['beergame/%beergame_game/monitor'] = array(
+    'page callback' => 'beergame_monitor_callback',
+    'page arguments' => array(1),
+    'delivery callback' => 'backdrop_json_deliver',
+    'access callback' => 'beergame_game_access',
+    'access arguments' => array('update', 1),
+    'type' => MENU_CALLBACK,
+    'file' => 'beergame.pages.inc',
+  );
+  $items['beergame/%beergame_game/computer/%/%'] = array(
+    'page callback' => 'beergame_computer_takeover_callback',
+    'page arguments' => array(1, 3, 4),
+    'access callback' => 'beergame_game_access',
+    'access arguments' => array('update', 1),
+    'type' => MENU_CALLBACK,
+    'file' => 'beergame.pages.inc',
+  );
+  $items['admin/config/content/beergame'] = array(
+    'title' => 'Beer Game',
+    'description' => 'Default settings for new Beer Games.',
+    'page callback' => 'backdrop_get_form',
+    'page arguments' => array('beergame_admin_settings_form'),
+    'access arguments' => array('administer beer games'),
+    'file' => 'beergame.admin.inc',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_user_delete().
+ *
+ * Positions held by a deleted account are handed to the computer.
+ */
+function beergame_user_delete($account) {
+  db_update('beergame_position')
+    ->fields(array('uid' => 0, 'pending_order' => NULL))
+    ->condition('uid', $account->uid)
+    ->execute();
+}
+
+/**
+ * Menu loader: loads a Beer Game.
+ *
+ * @param int $gid
+ *   The game ID.
+ *
+ * @return BeerGame|false
+ *   The game, or FALSE if not found.
+ */
+function beergame_game_load($gid) {
+  $games = entity_load('beergame_game', array($gid));
+  return $games ? reset($games) : FALSE;
+}
+
+/**
+ * Access callback for the game listing page.
+ */
+function beergame_list_access() {
+  return user_access('play beer games') || beergame_facilitator_access();
+}
+
+/**
+ * Access callback: whether the current person can facilitate games.
+ */
+function beergame_facilitator_access() {
+  return user_access('facilitate beer games') || user_access('administer beer games');
+}
+
+/**
+ * Determines whether a person may perform an operation on a game.
+ *
+ * @param string $op
+ *   One of 'view', 'update', 'delete', 'play' or 'results'.
+ * @param BeerGame $game
+ *   The game.
+ * @param object $account
+ *   (optional) The account to check. Defaults to the current person.
+ *
+ * @return bool
+ *   TRUE if access is allowed.
+ */
+function beergame_game_access($op, BeerGame $game, $account = NULL) {
+  if (!$account) {
+    $account = $GLOBALS['user'];
+  }
+  $manage = user_access('administer beer games', $account)
+    || ($account->uid && $account->uid == $game->uid && user_access('facilitate beer games', $account));
+  $play = user_access('play beer games', $account) && beergame_person_position($game, $account->uid);
+
+  switch ($op) {
+    case 'update':
+    case 'delete':
+      return $manage;
+
+    case 'play':
+      return (bool) $play;
+
+    case 'results':
+      return $manage || ($play && $game->status == 'finished');
+
+    case 'view':
+    default:
+      return $manage || $play;
+  }
+}
+
+/**
+ * Returns the role labels, in supply chain order.
+ *
+ * @return array
+ *   Labels keyed by role.
+ */
+function beergame_role_labels() {
+  return array(
+    'retailer' => t('Retailer'),
+    'wholesaler' => t('Wholesaler'),
+    'distributor' => t('Distributor'),
+    'factory' => t('Factory'),
+  );
+}
+
+/**
+ * Returns the game status labels.
+ *
+ * @return array
+ *   Labels keyed by status.
+ */
+function beergame_status_labels() {
+  return array(
+    'setup' => t('Setting up'),
+    'running' => t('Running'),
+    'paused' => t('Paused'),
+    'finished' => t('Finished'),
+  );
+}
+
+/**
+ * Returns the customer demand scenarios.
+ *
+ * @return array
+ *   Arrays with 'label' and 'description', keyed by scenario.
+ */
+function beergame_demand_scenarios() {
+  return array(
+    'step' => array(
+      'label' => t('Classic step'),
+      'description' => t('Steady, then steps up once and stays there. Best for first-time players: the debrief reveals that customers barely changed.'),
+    ),
+    'growth' => array(
+      'label' => t('Steady growth'),
+      'description' => t('Rises by one case every three weeks, up to 8 above the start, then levels off.'),
+    ),
+    'seasonal' => array(
+      'label' => t('Seasonal wave'),
+      'description' => t('Swings smoothly up and back down by 8 cases over a 12-week cycle.'),
+    ),
+    'promotion' => array(
+      'label' => t('Promotion spike'),
+      'description' => t('A four-week promotion lifts demand by 8 cases, then it drops back.'),
+    ),
+    'noisy' => array(
+      'label' => t('Noisy steady'),
+      'description' => t('Bounces randomly within 2 cases of a level 2 above the start, but never trends.'),
+    ),
+    'random' => array(
+      'label' => t('Random drift'),
+      'description' => t('Drifts randomly up or down each week by up to the largest change you set.'),
+    ),
+    'surprise' => array(
+      'label' => t('Surprise me'),
+      'description' => t('One of the first five scenarios is picked at random when the game starts, and kept secret until the results.'),
+    ),
+  );
+}
+
+/**
+ * Describes a game's customer demand for the facilitator.
+ *
+ * @param BeerGame $game
+ *   The game.
+ *
+ * @return string
+ *   A sentence describing the demand. A surprise scenario stays secret until
+ *   the game has finished.
+ */
+function beergame_demand_summary(BeerGame $game) {
+  $settings = $game->engine()->getSettings();
+  $scenarios = beergame_demand_scenarios();
+  $scenario = $settings['demand_pattern'];
+  if ($scenario == 'surprise') {
+    if ($game->status != 'finished' || empty($settings['demand_scenario'])) {
+      return t('Customer demand: a surprise scenario, revealed in the results.');
+    }
+    $scenario = $settings['demand_scenario'];
+  }
+  $args = array(
+    '@scenario' => $scenarios[$scenario]['label'],
+    '@initial' => $settings['demand_initial'],
+    '@week' => $settings['demand_step_week'],
+  );
+  if ($scenario == 'step') {
+    return t('Customer demand: @scenario, @initial cases a week, then @step from week @week.', $args + array('@step' => $settings['demand_step']));
+  }
+  if ($scenario == 'random') {
+    return t('Customer demand: @scenario, starting at @initial and changing by up to @variation a week from week @week.', $args + array('@variation' => $settings['demand_variation']));
+  }
+  return t('Customer demand: @scenario, starting at @initial and changing from week @week.', $args);
+}
+
+/**
+ * Returns the default settings for new games.
+ *
+ * @return array
+ *   Settings keyed by name.
+ */
+function beergame_default_settings() {
+  $settings = BeerGameEngine::defaultSettings();
+  $config = config('beergame.settings');
+  foreach (array_keys($settings) as $key) {
+    if (in_array($key, array('demand_schedule', 'demand_scenario'))) {
+      continue;
+    }
+    $value = $config->get($key);
+    if ($value !== NULL) {
+      $settings[$key] = $value;
+    }
+  }
+  return $settings;
+}
+
+/**
+ * Loads the teams of a game, with their positions.
+ *
+ * @param BeerGame $game
+ *   The game.
+ *
+ * @return array
+ *   Team objects keyed by team ID, in creation order.
+ */
+function beergame_teams_load(BeerGame $game) {
+  if (!$game->id()) {
+    return array();
+  }
+  $tids = db_query('SELECT tid FROM {beergame_team} WHERE gid = :gid ORDER BY tid', array(':gid' => $game->id()))->fetchCol();
+  $teams = array();
+  foreach ($tids as $tid) {
+    $teams[$tid] = beergame_team_load($tid);
+  }
+  return $teams;
+}
+
+/**
+ * Loads a team with its positions.
+ *
+ * @param int $tid
+ *   The team ID.
+ *
+ * @return object|false
+ *   The team, or FALSE if not found. $team->positions is keyed by role.
+ */
+function beergame_team_load($tid) {
+  $team = db_query('SELECT * FROM {beergame_team} WHERE tid = :tid', array(':tid' => $tid))->fetchObject();
+  if (!$team) {
+    return FALSE;
+  }
+  $team->state = empty($team->state) ? array() : unserialize($team->state, array('allowed_classes' => FALSE));
+  $team->positions = array();
+  foreach (array_keys(beergame_role_labels()) as $role) {
+    $team->positions[$role] = (object) array('tid' => $team->tid, 'role' => $role, 'uid' => 0, 'pending_order' => NULL);
+  }
+  $result = db_query('SELECT * FROM {beergame_position} WHERE tid = :tid', array(':tid' => $tid));
+  foreach ($result as $position) {
+    $position->uid = (int) $position->uid;
+    $team->positions[$position->role] = $position;
+  }
+  return $team;
+}
+
+/**
+ * Saves a team and its positions.
+ *
+ * @param object $team
+ *   The team. Positions in $team->positions are saved as well.
+ */
+function beergame_team_save($team) {
+  $team->changed = REQUEST_TIME;
+  if (empty($team->tid)) {
+    backdrop_write_record('beergame_team', $team);
+  }
+  else {
+    backdrop_write_record('beergame_team', $team, 'tid');
+  }
+  foreach ($team->positions as $role => $position) {
+    db_merge('beergame_position')
+      ->key(array('tid' => $team->tid, 'role' => $role))
+      ->fields(array(
+        'uid' => (int) $position->uid,
+        'pending_order' => isset($position->pending_order) ? (int) $position->pending_order : NULL,
+      ))
+      ->execute();
+  }
+}
+
+/**
+ * Deletes a team, its positions and its history.
+ *
+ * @param int $tid
+ *   The team ID.
+ */
+function beergame_team_delete($tid) {
+  db_delete('beergame_log')->condition('tid', $tid)->execute();
+  db_delete('beergame_position')->condition('tid', $tid)->execute();
+  db_delete('beergame_team')->condition('tid', $tid)->execute();
+}
+
+/**
+ * Finds the position a person plays in a game.
+ *
+ * @param BeerGame $game
+ *   The game.
+ * @param int $uid
+ *   The person's user ID.
+ *
+ * @return object|false
+ *   An object with tid and role properties, or FALSE.
+ */
+function beergame_person_position(BeerGame $game, $uid) {
+  $positions = &backdrop_static(__FUNCTION__, array());
+  if (!$uid || !$game->id()) {
+    return FALSE;
+  }
+  $key = $game->id() . ':' . $uid;
+  if (!isset($positions[$key])) {
+    $positions[$key] = db_query('SELECT p.tid, p.role FROM {beergame_position} p INNER JOIN {beergame_team} t ON t.tid = p.tid WHERE t.gid = :gid AND p.uid = :uid', array(
+      ':gid' => $game->id(),
+      ':uid' => $uid,
+    ))->fetchObject();
+  }
+  return $positions[$key];
+}
+
+/**
+ * Starts a game: every team begins week 1 in equilibrium.
+ *
+ * @param BeerGame $game
+ *   The game, which must be in setup.
+ */
+function beergame_game_start(BeerGame $game) {
+  $engine = $game->engine();
+  $settings = $engine->getSettings();
+  $scenario = $settings['demand_pattern'];
+  if ($scenario == 'surprise') {
+    $choices = BeerGameEngine::surpriseScenarios();
+    $scenario = $choices[array_rand($choices)];
+  }
+  $game->settings['demand_scenario'] = $scenario;
+  $game->settings['demand_schedule'] = $engine->demandSchedule($scenario);
+  $engine = $game->engine();
+  $game->status = 'running';
+  $game->save();
+  foreach (beergame_teams_load($game) as $team) {
+    $team->state = $engine->initialState();
+    $team->week = $team->state['week'];
+    $team->status = 'playing';
+    foreach ($team->positions as $position) {
+      $position->pending_order = NULL;
+    }
+    beergame_team_save($team);
+    // Teams made up entirely of computer players play through at once.
+    beergame_team_advance($game, $team->tid);
+  }
+}
+
+/**
+ * Places a person's order for the current week.
+ *
+ * @param BeerGame $game
+ *   The game.
+ * @param int $uid
+ *   The person placing the order.
+ * @param int $order
+ *   Cases ordered.
+ * @param int $week
+ *   The week the person believes they are ordering for. Guards against a
+ *   stale browser placing an order for the wrong week.
+ *
+ * @return string|true
+ *   TRUE on success, or a message explaining why the order was refused.
+ */
+function beergame_place_order(BeerGame $game, $uid, $order, $week) {
+  $position = beergame_person_position($game, $uid);
+  if (!$position) {
+    return t('You do not have a position in this game.');
+  }
+  if ($game->status != 'running') {
+    return t('The game is not running right now.');
+  }
+
+  $transaction = db_transaction();
+  try {
+    // Lock the team so simultaneous orders cannot both advance the week.
+    db_query('SELECT tid FROM {beergame_team} WHERE tid = :tid FOR UPDATE', array(':tid' => $position->tid));
+    $team = beergame_team_load($position->tid);
+    if ($team->status != 'playing') {
+      return t('Your team has finished playing.');
+    }
+    if ($team->week != $week) {
+      return t('That order was for week @week, but your team is now in week @current.', array('@week' => $week, '@current' => $team->week));
+    }
+    if (isset($team->positions[$position->role]->pending_order)) {
+      return t('You have already placed your order for this week.');
+    }
+    $team->positions[$position->role]->pending_order = max(0, (int) $order);
+    beergame_team_save($team);
+    beergame_team_advance($game, $team->tid);
+  }
+  catch (Exception $e) {
+    $transaction->rollback();
+    watchdog_exception('beergame', $e);
+    return t('Your order could not be saved. Please try again.');
+  }
+  return TRUE;
+}
+
+/**
+ * Advances a team through every week for which all orders are in.
+ *
+ * Computer players order automatically. Callers should hold a lock on the
+ * team row (see beergame_place_order()) when people may be ordering at the
+ * same time.
+ *
+ * @param BeerGame $game
+ *   The game.
+ * @param int $tid
+ *   The team ID.
+ */
+function beergame_team_advance(BeerGame $game, $tid) {
+  $engine = $game->engine();
+  $settings = $engine->getSettings();
+  while ($game->status == 'running') {
+    $team = beergame_team_load($tid);
+    if ($team->status != 'playing') {
+      break;
+    }
+    $orders = array();
+    foreach ($team->positions as $role => $position) {
+      if (!$position->uid) {
+        $orders[$role] = $engine->botOrder($team->state, $role);
+      }
+      elseif (isset($position->pending_order)) {
+        $orders[$role] = (int) $position->pending_order;
+      }
+      else {
+        // Still waiting for a person to order.
+        return;
+      }
+    }
+
+    foreach ($team->state['positions'] as $role => $values) {
+      db_merge('beergame_log')
+        ->key(array('tid' => $tid, 'role' => $role, 'week' => $team->week))
+        ->fields(array(
+          'incoming_order' => $values['incoming_order'],
+          'delivered' => $values['delivered'],
+          'shipped' => $values['shipped'],
+          'inventory' => $values['inventory'],
+          'backlog' => $values['backlog'],
+          'order_placed' => $orders[$role],
+          'cost' => $values['cost_week'],
+          'computer' => $team->positions[$role]->uid ? 0 : 1,
+        ))
+        ->execute();
+    }
+
+    if ($team->week >= $settings['end_week']) {
+      $team->status = 'finished';
+    }
+    else {
+      $team->state = $engine->advance($team->state, $orders);
+      $team->week = $team->state['week'];
+    }
+    foreach ($team->positions as $position) {
+      $position->pending_order = NULL;
+    }
+    beergame_team_save($team);
+    module_invoke_all('beergame_week_completed', $game, $team);
+  }
+  beergame_game_check_finished($game);
+}
+
+/**
+ * Marks a running game finished once every team has finished.
+ *
+ * @param BeerGame $game
+ *   The game.
+ */
+function beergame_game_check_finished(BeerGame $game) {
+  if ($game->status != 'running') {
+    return;
+  }
+  $remaining = db_query("SELECT COUNT(*) FROM {beergame_team} WHERE gid = :gid AND status <> 'finished'", array(':gid' => $game->id()))->fetchField();
+  if (!$remaining) {
+    $game->status = 'finished';
+    $game->save();
+  }
+}
+
+/**
+ * Hands a position over to the computer, e.g. when a person drops out.
+ *
+ * @param BeerGame $game
+ *   The game.
+ * @param int $tid
+ *   The team ID.
+ * @param string $role
+ *   The role.
+ */
+function beergame_position_to_computer(BeerGame $game, $tid, $role) {
+  $transaction = db_transaction();
+  db_query('SELECT tid FROM {beergame_team} WHERE tid = :tid FOR UPDATE', array(':tid' => $tid));
+  $team = beergame_team_load($tid);
+  if (!$team || $team->gid != $game->id() || !isset($team->positions[$role])) {
+    return;
+  }
+  $team->positions[$role]->uid = 0;
+  $team->positions[$role]->pending_order = NULL;
+  beergame_team_save($team);
+  backdrop_static_reset('beergame_person_position');
+  if ($team->status == 'playing') {
+    beergame_team_advance($game, $tid);
+  }
+}
+
+/**
+ * Loads the week-by-week history of a team.
+ *
+ * @param int $tid
+ *   The team ID.
+ * @param string $role
+ *   (optional) Limit to one role.
+ *
+ * @return array
+ *   Log rows keyed by role, then by week.
+ */
+function beergame_team_history($tid, $role = NULL) {
+  $query = db_select('beergame_log', 'l')
+    ->fields('l')
+    ->condition('tid', $tid)
+    ->orderBy('week');
+  if ($role) {
+    $query->condition('role', $role);
+  }
+  $history = array();
+  foreach ($query->execute() as $row) {
+    $history[$row->role][$row->week] = $row;
+  }
+  return $history;
+}
+
+/**
+ * Returns the display name of the person in a position.
+ *
+ * @param object $position
+ *   The position.
+ *
+ * @return string
+ *   The person's name, or "Computer".
+ */
+function beergame_position_player_name($position) {
+  if (!$position->uid) {
+    return t('Computer');
+  }
+  $account = user_load($position->uid);
+  return $account ? user_format_name($account) : t('Unknown');
+}
