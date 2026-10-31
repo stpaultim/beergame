@@ -1,5 +1,5 @@
 name = Beer Game
-description = A multiplayer online version of the MIT Beer Distribution Game for teaching supply chain and system dynamics.
+description = A multiplayer online version of the Beer Distribution Game for teaching supply chain and system dynamics.
 type = module
 backdrop = 1.x
 package = Education

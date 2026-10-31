@@ -441,7 +441,7 @@ function beergame_game_form($form, &$form_state, BeerGame $game) {
   $form['settings'] = array(
     '#type' => 'fieldset',
     '#title' => t('Game settings'),
-    '#description' => $setup ? t('The defaults follow the classic MIT game.') : t('Settings cannot be changed once the game has started.'),
+    '#description' => $setup ? t('The defaults follow the classic game.') : t('Settings cannot be changed once the game has started.'),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
     '#tree' => TRUE,

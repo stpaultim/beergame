@@ -14,7 +14,7 @@ function beergame_admin_settings_form($form, &$form_state) {
   module_load_include('inc', 'beergame', 'beergame.pages');
   $form['help'] = array(
     '#type' => 'help',
-    '#markup' => t('These settings are used for new games. Facilitators can change them for each game before it starts. The defaults follow the classic MIT Beer Game.'),
+    '#markup' => t('These settings are used for new games. Facilitators can change them for each game before it starts. The defaults follow the classic Beer Game.'),
   );
   $form['settings'] = array('#tree' => TRUE) + beergame_settings_elements(beergame_default_settings());
   $form['poll_interval'] = array(

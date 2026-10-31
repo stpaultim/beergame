@@ -7,7 +7,7 @@
  * tested in isolation. It works on a plain array describing the state of one
  * team (one supply chain of four positions).
  *
- * A week is played in five steps, following the MIT/Sterman protocol:
+ * A week is played in five steps, following Sterman (1989):
  *   1. Receive incoming deliveries (shipping delays advance).
  *   2. Receive incoming orders (order delays advance).
  *   3. Fill orders: orders to fill = new orders + backlog.
@@ -44,7 +44,7 @@ class BeerGameEngine {
    * Constructs a BeerGameEngine.
    *
    * @param array $settings
-   *   Game settings. Missing keys fall back to the classic MIT values.
+   *   Game settings. Missing keys fall back to the classic values.
    */
   public function __construct(array $settings = array()) {
     $this->settings = $settings + self::defaultSettings();
