@@ -345,6 +345,50 @@ function beergame_demand_scenarios() {
 }
 
 /**
+ * Returns the costs of an all-computer team playing a game's demand.
+ *
+ * @param BeerGame $game
+ *   The game.
+ * @param int $weeks
+ *   The number of weeks to compare over.
+ *
+ * @return float[]
+ *   Total cost for each role, keyed by role.
+ *
+ * @see BeerGameEngine::benchmark()
+ */
+function beergame_benchmark(BeerGame $game, $weeks) {
+  $benchmarks = &backdrop_static(__FUNCTION__, array());
+  $key = $game->id() . ':' . $weeks;
+  if (!isset($benchmarks[$key])) {
+    $benchmarks[$key] = $game->engine()->benchmark($weeks);
+  }
+  return $benchmarks[$key];
+}
+
+/**
+ * Describes a team's cost compared with the computer-only benchmark.
+ *
+ * @param float $cost
+ *   The team's total cost.
+ * @param float $benchmark
+ *   The computer-only team's total cost over the same weeks.
+ *
+ * @return string
+ *   For example "$1,200.00 better" or "$300.00 worse".
+ */
+function beergame_benchmark_difference($cost, $benchmark) {
+  $difference = '$' . number_format(abs($benchmark - $cost), 2);
+  if ($cost < $benchmark) {
+    return t('@amount better', array('@amount' => $difference));
+  }
+  if ($cost > $benchmark) {
+    return t('@amount worse', array('@amount' => $difference));
+  }
+  return t('The same');
+}
+
+/**
  * Returns the label of the demand scenario a game uses.
  *
  * @param BeerGame $game

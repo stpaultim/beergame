@@ -98,6 +98,28 @@ class BeerGameEngineTestCase extends BackdropUnitTestCase {
   }
 
   /**
+   * The benchmark matches a team of computer players.
+   */
+  public function testBenchmark() {
+    $engine = new BeerGameEngine(array('demand_step' => 4));
+    $costs = $engine->benchmark(10);
+    $this->assertEqual($costs['retailer'], 60, 'A balanced computer team pays $6 a week per position.');
+
+    $engine = new BeerGameEngine();
+    $state = $engine->initialState();
+    $expected = array_fill_keys(BeerGameEngine::ROLES, 0.0);
+    for ($week = 1; $week <= 36; $week++) {
+      $orders = array();
+      foreach (BeerGameEngine::ROLES as $role) {
+        $expected[$role] += $state['positions'][$role]['cost_week'];
+        $orders[$role] = $engine->botOrder($state, $role);
+      }
+      $state = $engine->advance($state, $orders);
+    }
+    $this->assertEqual($engine->benchmark(36), $expected, 'The benchmark matches 36 weeks of computer play.');
+  }
+
+  /**
    * Orders take the configured delays to arrive.
    */
   public function testDelays() {

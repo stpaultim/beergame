@@ -259,6 +259,36 @@ class BeerGameEngine {
   }
 
   /**
+   * Plays a team of four computer players, for comparison with people.
+   *
+   * Computer players have no randomness, so for a given demand schedule the
+   * result is always the same and can be recalculated whenever needed.
+   *
+   * @param int $weeks
+   *   The number of weeks to play.
+   *
+   * @return float[]
+   *   Total cost for each role over those weeks, keyed by role.
+   */
+  public function benchmark($weeks) {
+    $costs = array_fill_keys(self::ROLES, 0.0);
+    $state = $this->initialState();
+    for ($week = 1; $week <= $weeks; $week++) {
+      foreach (self::ROLES as $role) {
+        $costs[$role] += $state['positions'][$role]['cost_week'];
+      }
+      if ($week < $weeks) {
+        $orders = array();
+        foreach (self::ROLES as $role) {
+          $orders[$role] = $this->botOrder($state, $role);
+        }
+        $state = $this->advance($state, $orders);
+      }
+    }
+    return $costs;
+  }
+
+  /**
    * Calculates the order a computer player would place this week.
    *
    * Uses Sterman's anchoring and adjustment heuristic: forecast demand, then

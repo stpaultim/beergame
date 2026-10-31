@@ -51,6 +51,7 @@
     this.$board.empty();
     this.$header = $('<div class="beergame-board-header"></div>');
     this.$notice = $('<div class="beergame-notice" role="status" aria-live="polite"></div>');
+    this.$weekTitle = $('<h2 class="beergame-week-title"></h2>');
     this.$week = $('<div class="beergame-week"></div>');
     this.$transit = $('<p class="beergame-transit"></p>');
 
@@ -72,10 +73,10 @@
     });
 
     this.$history = $('<section class="beergame-panel beergame-history"></section>');
-    var $main = $('<section class="beergame-panel beergame-board-main"></section>').append(this.$week, this.$transit, this.$form);
+    // The current week, waiting for this player's order.
+    var $main = $('<section class="beergame-panel beergame-board-main"></section>').append(this.$weekTitle, this.$notice, this.$week, this.$transit, this.$form);
     this.$board.append(
       this.$header,
-      this.$notice,
       $('<div class="beergame-board-layout"></div>').append($main, this.$history)
     );
   };
@@ -148,16 +149,16 @@
     if (previous && previous.week !== state.week) {
       this.$input.val('');
       this.showError('');
-      this.$notice.text(t('Week @week has begun. Your teammates have all ordered.', {'@week': state.week})).addClass('is-new');
+      this.$notice.text(t('New week: your teammates have all ordered.')).addClass('is-new');
     }
 
     this.$header.empty().append(
       $('<h2 class="beergame-role"></h2>').text(state.roleLabel),
-      $('<p class="beergame-meta"></p>').text(t('@team · Week @week of @weeks', {
-        '@team': state.teamName,
-        '@week': state.week || 1,
-        '@weeks': state.announcedWeeks
-      }))
+      $('<p class="beergame-meta"></p>').text(state.teamName)
+    );
+    this.$weekTitle.empty().append(
+      document.createTextNode(t('Week @week', {'@week': state.week || 1}) + ' '),
+      $('<span class="beergame-week-of"></span>').text(t('of @weeks', {'@weeks': state.announcedWeeks}))
     );
 
     this.renderWeek(state);
@@ -271,7 +272,7 @@
    */
   BeerGameBoard.prototype.renderHistory = function (state) {
     var t = Backdrop.t;
-    this.$history.empty().append($('<h2></h2>').text(t('Your record')));
+    this.$history.empty().append($('<h2></h2>').text(t('Past weeks')));
     if (!state.history.length) {
       this.$history.append($('<p></p>').text(t('Your past weeks will appear here.')));
       return;

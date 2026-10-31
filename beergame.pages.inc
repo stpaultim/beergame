@@ -46,7 +46,8 @@ function beergame_list_page() {
 
   $query = 'SELECT g.gid, t.name AS team, t.week, p.role,'
     . ' (SELECT SUM(l.cost) FROM {beergame_log} l WHERE l.tid = p.tid AND l.role = p.role) AS position_cost,'
-    . ' (SELECT SUM(l.cost) FROM {beergame_log} l WHERE l.tid = p.tid) AS team_cost'
+    . ' (SELECT SUM(l.cost) FROM {beergame_log} l WHERE l.tid = p.tid) AS team_cost,'
+    . ' (SELECT MAX(l.week) FROM {beergame_log} l WHERE l.tid = p.tid) AS weeks_played'
     . ' FROM {beergame_position} p INNER JOIN {beergame_team} t ON t.tid = p.tid INNER JOIN {beergame_game} g ON g.gid = t.gid'
     . ' WHERE p.uid = :uid ORDER BY g.created DESC';
   $result = db_query($query, array(':uid' => $user->uid));
@@ -72,6 +73,8 @@ function beergame_list_page() {
       $game->status == 'finished' ? beergame_demand_scenario_label($game) : t('Revealed at the end'),
       isset($record->position_cost) ? '$' . number_format($record->position_cost, 2) : '-',
       isset($record->team_cost) ? '$' . number_format($record->team_cost, 2) : '-',
+      // Shown once the game is over, like the scenario.
+      $game->status == 'finished' && $record->weeks_played ? '$' . number_format(array_sum(beergame_benchmark($game, (int) $record->weeks_played)), 2) : '-',
       implode(' · ', $links),
     );
   }
@@ -79,7 +82,7 @@ function beergame_list_page() {
     $build['playing'] = array(
       '#theme' => 'table',
       '#caption' => t('Games you are playing'),
-      '#header' => array(t('Game'), t('Played'), t('Team'), t('Position'), t('Status'), t('Week'), t('Scenario'), t('Your cost'), t('Team cost'), t('Operations')),
+      '#header' => array(t('Game'), t('Played'), t('Team'), t('Position'), t('Status'), t('Week'), t('Scenario'), t('Your cost'), t('Team cost'), t('Computers alone'), t('Operations')),
       '#rows' => $rows,
       '#empty' => t('You have not been given a position in any game yet. Your facilitator will add you to a team.'),
     );
@@ -1016,6 +1019,7 @@ function beergame_results_page(BeerGame $game) {
     $chart_team = array('name' => $team->name, 'roles' => array());
     $row = array('team' => check_plain($team->name));
     $total = 0;
+    $team_weeks = 0;
     foreach ($role_labels as $role => $label) {
       $orders = array();
       $inventory = array();
@@ -1026,6 +1030,7 @@ function beergame_results_page(BeerGame $game) {
           $inventory[] = (int) $log->inventory - (int) $log->backlog;
           $cost += $log->cost;
           $last_week = max($last_week, $week);
+          $team_weeks = max($team_weeks, $week);
         }
       }
       $chart_team['roles'][$role] = array('orders' => $orders, 'inventory' => $inventory);
@@ -1033,6 +1038,8 @@ function beergame_results_page(BeerGame $game) {
       $total += $cost;
     }
     $row['total'] = '<strong>$' . number_format($total, 2) . '</strong>';
+    // Compare over the weeks this team played, in case the game ended early.
+    $row['benchmark'] = $team_weeks ? beergame_benchmark_difference($total, array_sum(beergame_benchmark($game, $team_weeks))) : '-';
     $cost_rows[] = array('total' => $total, 'row' => $row);
     $chart_teams[] = $chart_team;
   }
@@ -1048,11 +1055,20 @@ function beergame_results_page(BeerGame $game) {
   foreach ($cost_rows as $rank => $cost_row) {
     $rows[] = array_merge(array($rank + 1), array_values($cost_row['row']));
   }
+  $benchmark = beergame_benchmark($game, $last_week);
+  $benchmark_row = array('-', t('Computers alone'));
+  foreach (array_keys($role_labels) as $role) {
+    $benchmark_row[] = '$' . number_format($benchmark[$role], 2);
+  }
+  $benchmark_row[] = '$' . number_format(array_sum($benchmark), 2);
+  $benchmark_row[] = '';
+  $rows[] = array('data' => $benchmark_row, 'class' => array('beergame-benchmark-row'));
   $header = array(t('Rank'), t('Team'));
   foreach ($role_labels as $label) {
     $header[] = $label;
   }
   $header[] = t('Total cost');
+  $header[] = t('vs computers');
 
   $demand = array();
   for ($week = 1; $week <= $last_week; $week++) {
@@ -1070,6 +1086,7 @@ function beergame_results_page(BeerGame $game) {
     '#caption' => t('Total costs'),
     '#header' => $header,
     '#rows' => $rows,
+    '#suffix' => '<p class="description">' . t('"Computers alone" is a team of four computer players facing the same customer demand. The computers order like a typical first-time player.') . '</p>',
   );
   $build['charts'] = array(
     '#type' => 'container',

@@ -47,6 +47,16 @@
   color: var(--beergame-muted);
   margin: 0;
 }
+.beergame-board .beergame-week-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+}
+.beergame-week-of {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--beergame-muted);
+}
 .beergame-notice:empty {
   display: none;
 }
@@ -230,6 +240,12 @@
 }
 .beergame-team-finished td {
   color: var(--beergame-muted);
+}
+
+/* Results. */
+.beergame-benchmark-row td {
+  font-style: italic;
+  color: #52514e;
 }
 
 /* Results charts. */
