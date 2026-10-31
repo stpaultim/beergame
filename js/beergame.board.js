@@ -38,6 +38,7 @@
     this.state = null;
     this.fingerprint = '';
     this.deadline = null;
+    this.buildMotionToggle();
     this.build();
     this.update(options.initial);
     this.schedule();
@@ -212,6 +213,7 @@
       $('<span class="beergame-week-of"></span>').text(t('of @weeks', {'@weeks': state.announcedWeeks}))
     );
 
+    this.renderChainStatus(state);
     this.renderWeek(state);
     this.renderTransit(state);
     this.renderForm(state);
@@ -230,6 +232,7 @@
     if (!$chain.length) {
       return;
     }
+    this.flyChain($chain, state);
     var flows = [
       {
         $target: $chain.find('.beergame-chain-link[data-upstream="' + state.role + '"] .beergame-chain-orders'),
@@ -253,6 +256,146 @@
       $chain.find('.beergame-chain-flow').remove();
       $chain.find('.is-flowing').removeClass('is-flowing');
     }, 4000);
+  };
+
+  /**
+   * Whether to animate the supply chain.
+   *
+   * The facilitator can turn animations off for the game, each player can
+   * turn them off for themselves, and so can the system's reduced motion
+   * setting.
+   */
+  BeerGameBoard.prototype.animationsOn = function () {
+    if (!this.options.animations) {
+      return false;
+    }
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return false;
+    }
+    try {
+      return window.localStorage.getItem('beergame-animations') !== 'off';
+    }
+    catch (e) {
+      return true;
+    }
+  };
+
+  /**
+   * Adds the player's own on/off switch for animations under the chain.
+   */
+  BeerGameBoard.prototype.buildMotionToggle = function () {
+    var self = this;
+    var t = Backdrop.t;
+    var $chain = $('.beergame-chain');
+    if (!this.options.animations || !$chain.length) {
+      return;
+    }
+    var icons = this.options.motionIcons || {};
+    var $toggle = $('<button type="button" class="beergame-motion-toggle"></button>');
+    var refresh = function () {
+      var on = self.animationsOn();
+      // The icon markup comes from the server's icon().
+      $toggle.attr('aria-pressed', on ? 'true' : 'false')
+        .attr('title', on ? t('Turn off animations between weeks') : t('Turn on animations between weeks'))
+        .html(icons[on ? 'on' : 'off'] || '')
+        .append(document.createTextNode(on ? t('Animations on') : t('Animations off')));
+      $chain.toggleClass('is-still', !on);
+    };
+    $toggle.on('click', function () {
+      try {
+        window.localStorage.setItem('beergame-animations', self.animationsOn() ? 'off' : 'on');
+      }
+      catch (e) {}
+      refresh();
+    });
+    $chain.find('.beergame-chain-caption').append($toggle);
+    refresh();
+  };
+
+  /**
+   * Sends a truck and an envelope along the supply chain between weeks.
+   *
+   * Both arrive at the player: the truck brings the beer that just arrived,
+   * and the envelope brings the order that just came in (from customers, for
+   * the retailer). The factory has no supplier, so its truck leaves for the
+   * distributor instead.
+   */
+  BeerGameBoard.prototype.flyChain = function ($chain, state) {
+    if (!this.animationsOn() || !Element.prototype.animate) {
+      return;
+    }
+    var t = Backdrop.t;
+    var icons = this.options.flyIcons || {};
+    var roles = ['retailer', 'wholesaler', 'distributor', 'factory'];
+    var index = roles.indexOf(state.role);
+    var $you = $chain.find('.beergame-chain-' + state.role);
+    if (state.role === 'factory') {
+      var $distributor = $chain.find('.beergame-chain-distributor');
+      this.fly($chain, $distributor, $you, icons.envelope, t('@count ordered', {'@count': state.position.incomingOrder}), 'envelope', 0);
+      this.fly($chain, $you, $distributor, icons.truck, t('@count shipped', {'@count': state.position.shipped}), 'truck', 300);
+    }
+    else {
+      var $supplier = $chain.find('.beergame-chain-' + roles[index + 1]);
+      var $customer = $chain.find('.beergame-chain-' + (index === 0 ? 'customers' : roles[index - 1]));
+      this.fly($chain, $customer, $you, icons.envelope, t('@count ordered', {'@count': state.position.incomingOrder}), 'envelope', 0);
+      this.fly($chain, $supplier, $you, icons.truck, t('@count arrived', {'@count': state.position.delivered}), 'truck', 300);
+    }
+  };
+
+  /**
+   * Flies an icon with a label from one box on the supply chain to another.
+   */
+  BeerGameBoard.prototype.fly = function ($chain, $from, $to, icon, label, type, delay) {
+    if (!$from.length || !$to.length) {
+      return;
+    }
+    var base = $chain[0].getBoundingClientRect();
+    var from = $from[0].getBoundingClientRect();
+    var to = $to[0].getBoundingClientRect();
+    // Trucks travel low and envelopes high, so they pass each other.
+    var lane = type === 'truck' ? 0.72 : 0.28;
+    var start = [from.left + from.width / 2 - base.left, from.top + from.height * lane - base.top];
+    var end = [to.left + to.width / 2 - base.left, to.top + to.height * lane - base.top];
+    var $flyer = $('<div class="beergame-chain-flyer" aria-hidden="true"></div>')
+      .addClass('is-' + type)
+      // The icon markup comes from the server's icon().
+      .html(icon || '')
+      .append($('<span></span>').text(label));
+    // Icons face right; turn them round when travelling left.
+    $flyer.toggleClass('is-leftward', end[0] < start[0]);
+    $chain.append($flyer);
+    var position = function (point) {
+      return 'translate(' + point[0] + 'px, ' + point[1] + 'px) translate(-50%, -50%)';
+    };
+    var animation = $flyer[0].animate([
+      {transform: position(start), opacity: 0},
+      {opacity: 1, offset: 0.15},
+      {opacity: 1, offset: 0.85},
+      {transform: position(end), opacity: 0}
+    ], {duration: 2200, delay: delay, easing: 'ease-in-out', fill: 'both'});
+    animation.onfinish = function () {
+      $flyer.remove();
+    };
+  };
+
+  /**
+   * Shows on the supply chain who has ordered this week, but not how much.
+   */
+  BeerGameBoard.prototype.renderChainStatus = function (state) {
+    var t = Backdrop.t;
+    var icons = this.options.statusIcons || {};
+    var labels = {ordered: t('Ordered'), deciding: t('Deciding'), autoplay: t('Autoplay')};
+    var playing = state.gameStatus === 'running' && state.teamStatus === 'playing';
+    $('.beergame-chain-status').each(function () {
+      var $status = $(this);
+      var status = playing && state.positionStatus ? state.positionStatus[$status.data('role')] : null;
+      $status.removeClass('is-ordered is-deciding is-autoplay').empty();
+      if (status) {
+        // The icon markup comes from the server's icon().
+        $status.addClass('is-' + status).html(icons[status] || '')
+          .append(document.createTextNode(labels[status]));
+      }
+    });
   };
 
   /**

@@ -419,6 +419,7 @@
 
 /* The supply chain, with the player's own position highlighted. */
 .beergame-chain {
+  position: relative;
   margin: 0 0 0.75rem;
 }
 .beergame-chain-list {
@@ -546,6 +547,9 @@
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--beergame-factory) 35%, transparent);
   }
 }
+.beergame-chain.is-still .is-flowing {
+  animation: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .beergame-chain-orders.is-flowing,
   .beergame-chain-beer.is-flowing,
@@ -558,4 +562,85 @@
 .beergame-chain .beergame-chain-note .beergame-chain-flow {
   inset-block-end: auto;
   inset-block-start: 100%;
+}
+
+/* Whether each position has ordered this week. */
+.beergame-chain-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.7rem;
+}
+.beergame-chain-status:empty {
+  display: none;
+}
+.beergame-chain-node .beergame-chain-status svg {
+  color: currentColor;
+}
+.beergame-chain-status.is-ordered {
+  color: var(--beergame-ready);
+  font-weight: 700;
+}
+.beergame-chain-status.is-deciding,
+.beergame-chain-status.is-autoplay {
+  color: var(--beergame-muted);
+}
+
+/* A truck and an envelope travelling along the chain between weeks. */
+.beergame-chain-flyer {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+.beergame-chain-flyer.is-truck svg {
+  color: var(--beergame-factory);
+}
+.beergame-chain-flyer.is-envelope svg {
+  color: var(--beergame-muted);
+}
+.beergame-chain-flyer.is-leftward svg {
+  transform: scaleX(-1);
+}
+.beergame-chain-flyer span {
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--beergame-text);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* The player's own switch for animations, at the end of the caption. */
+.beergame-chain-caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+}
+.beergame-motion-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--beergame-border);
+  border-radius: 999px;
+  background: var(--beergame-surface);
+  color: var(--beergame-text);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.beergame-motion-toggle:hover,
+.beergame-motion-toggle:focus-visible {
+  border-color: var(--beergame-muted);
+}
+.beergame-motion-toggle[aria-pressed="false"] {
+  color: var(--beergame-muted);
 }

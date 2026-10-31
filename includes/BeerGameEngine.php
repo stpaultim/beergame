@@ -78,6 +78,7 @@ class BeerGameEngine {
       'announced_weeks' => 50,
       'end_week' => 40,
       'week_seconds' => 0,
+      'animations' => 1,
     );
   }
 

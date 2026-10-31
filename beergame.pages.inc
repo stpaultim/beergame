@@ -258,6 +258,17 @@ function beergame_settings_elements(array $settings) {
     '#default_value' => $settings['week_seconds'],
   ) + $integer;
 
+  $elements['board'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Player board'),
+  );
+  $elements['board']['animations'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Animate the supply chain between weeks'),
+    '#description' => t('A truck brings each player\'s beer and an envelope carries their order. Players can still turn animations off for themselves.'),
+    '#default_value' => $settings['animations'],
+  );
+
   $elements['starting'] = array(
     '#type' => 'fieldset',
     '#title' => t('Starting position'),
@@ -957,6 +968,20 @@ function beergame_board_page(BeerGame $game) {
         'stateUrl' => url('beergame/' . $game->id() . '/board-state'),
         'orderUrl' => url('beergame/' . $game->id() . '/order'),
         'token' => backdrop_get_token('beergame-order-' . $game->id()),
+        'animations' => (bool) $game->engine()->getSettings()['animations'],
+        'motionIcons' => array(
+          'on' => icon('pause-circle', array('attributes' => array('width' => 18, 'height' => 18, 'aria-hidden' => 'true'))),
+          'off' => icon('play-circle', array('attributes' => array('width' => 18, 'height' => 18, 'aria-hidden' => 'true'))),
+        ),
+        'flyIcons' => array(
+          'truck' => icon('truck-fill', array('attributes' => array('width' => 30, 'height' => 30, 'aria-hidden' => 'true'))),
+          'envelope' => icon('envelope-simple-fill', array('attributes' => array('width' => 24, 'height' => 24, 'aria-hidden' => 'true'))),
+        ),
+        'statusIcons' => array(
+          'ordered' => icon('check-circle-fill', array('attributes' => array('width' => 14, 'height' => 14, 'aria-hidden' => 'true'))),
+          'deciding' => icon('hourglass', array('attributes' => array('width' => 14, 'height' => 14, 'aria-hidden' => 'true'))),
+          'autoplay' => icon('robot', array('attributes' => array('width' => 14, 'height' => 14, 'aria-hidden' => 'true'))),
+        ),
         'roleIcon' => icon('beer-stein-fill', array('attributes' => array('width' => 28, 'height' => 28, 'class' => array('beergame-role-icon'), 'aria-hidden' => 'true'))),
         'pollInterval' => (int) config_get('beergame.settings', 'poll_interval') * 1000,
         'initial' => beergame_board_state($game, $user->uid),
@@ -1144,7 +1169,9 @@ function beergame_supply_chain(BeerGame $game, $role) {
     if ($key == 'factory') {
       $note = '<small class="beergame-chain-note">' . t('brews in @time', array('@time' => $weeks($settings['production_request_delay'] + $settings['production_delay']))) . '</small>';
     }
-    $items[] = '<li class="' . implode(' ', $classes) . '">' . $you . $icon($nodes[$key]['icon']) . '<span class="beergame-chain-label">' . $node['label'] . '</span>' . $note . '</li>';
+    // Filled in by beergame.board.js with whether this week's order is in.
+    $status = $key == 'customers' ? '' : '<span class="beergame-chain-status" data-role="' . $key . '"></span>';
+    $items[] = '<li class="' . implode(' ', $classes) . '">' . $you . $icon($nodes[$key]['icon']) . '<span class="beergame-chain-label">' . $node['label'] . '</span>' . $note . $status . '</li>';
     $previous = $key;
   }
 
@@ -1152,7 +1179,7 @@ function beergame_supply_chain(BeerGame $game, $role) {
     '#type' => 'markup',
     '#markup' => '<figure class="beergame-chain">'
       . '<ol class="beergame-chain-list">' . implode('', $items) . '</ol>'
-      . '<figcaption class="beergame-chain-caption">' . t('Orders travel up the chain, from customers to the factory. Beer travels back down. You are the @role.', array('@role' => backdrop_strtolower($role_labels[$role]))) . '</figcaption>'
+      . '<figcaption class="beergame-chain-caption"><span>' . t('Orders travel up the chain, from customers to the factory. Beer travels back down. You are the @role.', array('@role' => backdrop_strtolower($role_labels[$role]))) . '</span></figcaption>'
       . '</figure>',
   );
 }
@@ -1181,12 +1208,18 @@ function beergame_board_state(BeerGame $game, $uid) {
 
   $people = 0;
   $ordered = 0;
-  foreach ($team->positions as $team_position) {
+  // Whether each position has ordered this week, without saying how much.
+  $team_status = array();
+  foreach ($team->positions as $team_role => $team_position) {
     if ($team_position->uid) {
       $people++;
       if (isset($team_position->pending_order)) {
         $ordered++;
       }
+      $team_status[$team_role] = isset($team_position->pending_order) ? 'ordered' : 'deciding';
+    }
+    else {
+      $team_status[$team_role] = 'autoplay';
     }
   }
 
@@ -1205,6 +1238,7 @@ function beergame_board_state(BeerGame $game, $uid) {
     'backlogCost' => (float) $settings['backlog_cost'],
     'people' => $people,
     'ordered' => $ordered,
+    'positionStatus' => $team_status,
     'pendingOrder' => isset($team->positions[$role]->pending_order) ? (int) $team->positions[$role]->pending_order : NULL,
     'secondsLeft' => $position->former ? NULL : beergame_timer_seconds_left($game, $team),
     // The person's position was handed to the computer or someone else.

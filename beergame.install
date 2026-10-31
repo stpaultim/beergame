@@ -302,3 +302,14 @@ function beergame_update_1101() {
     ));
   }
 }
+
+/**
+ * Add a setting for animating the supply chain between weeks.
+ */
+function beergame_update_1102() {
+  $config = config('beergame.settings');
+  if ($config->get('animations') === NULL) {
+    $config->set('animations', 1);
+    $config->save();
+  }
+}
