@@ -108,6 +108,12 @@ function beergame_schema() {
         'serialize' => TRUE,
         'description' => 'Serialized simulation state from BeerGameEngine.',
       ),
+      'deadline' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Unix timestamp when time runs out for the current week; 0 when no timer is running.',
+      ),
       'changed' => array(
         'type' => 'int',
         'not null' => TRUE,
@@ -229,9 +235,44 @@ function beergame_schema() {
         'default' => 0,
         'description' => 'Whether the order was placed by a computer player.',
       ),
+      'timed_out' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Whether time ran out, so the previous order was repeated.',
+      ),
     ),
     'primary key' => array('tid', 'role', 'week'),
   );
 
   return $schema;
+}
+
+/**
+ * Add week timers to Beer Games.
+ */
+function beergame_update_1100() {
+  if (!db_field_exists('beergame_team', 'deadline')) {
+    db_add_field('beergame_team', 'deadline', array(
+      'type' => 'int',
+      'not null' => TRUE,
+      'default' => 0,
+      'description' => 'Unix timestamp when time runs out for the current week; 0 when no timer is running.',
+    ));
+  }
+  if (!db_field_exists('beergame_log', 'timed_out')) {
+    db_add_field('beergame_log', 'timed_out', array(
+      'type' => 'int',
+      'size' => 'tiny',
+      'not null' => TRUE,
+      'default' => 0,
+      'description' => 'Whether time ran out, so the previous order was repeated.',
+    ));
+  }
+  $config = config('beergame.settings');
+  if ($config->get('week_seconds') === NULL) {
+    $config->set('week_seconds', 0);
+    $config->save();
+  }
 }

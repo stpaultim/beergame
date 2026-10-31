@@ -144,4 +144,18 @@ class BeerGameEngineTestCase extends BackdropUnitTestCase {
     }
   }
 
+  /**
+   * A person whose time runs out repeats their previous order.
+   */
+  public function testTimeoutOrder() {
+    $engine = new BeerGameEngine();
+    $state = $engine->initialState();
+    $this->assertEqual($engine->timeoutOrder($state, 'wholesaler'), 4, 'In week 1 the steady order of 4 is placed.');
+    $orders = array_fill_keys(BeerGameEngine::ROLES, 4);
+    $orders['wholesaler'] = 9;
+    $state = $engine->advance($state, $orders);
+    $this->assertEqual($engine->timeoutOrder($state, 'wholesaler'), 9, 'Later, the previous order is repeated.');
+    $this->assertEqual($engine->timeoutOrder($state, 'retailer'), 4, 'Each position repeats its own order.');
+  }
+
 }

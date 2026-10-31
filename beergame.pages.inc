@@ -245,6 +245,16 @@ function beergame_settings_elements(array $settings) {
     '#min' => 1,
   ) + $integer;
 
+  $elements['timer'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Timer'),
+  );
+  $elements['timer']['week_seconds'] = array(
+    '#title' => t('Seconds per week'),
+    '#description' => t('Leave at 0 for no timer. The timer only runs once you start it from the game dashboard. Anyone who has not ordered when time runs out repeats their order from the previous week.'),
+    '#default_value' => $settings['week_seconds'],
+  ) + $integer;
+
   $elements['starting'] = array(
     '#type' => 'fieldset',
     '#title' => t('Starting position'),
@@ -609,16 +619,23 @@ function beergame_game_page(BeerGame $game) {
   if (!beergame_game_access('update', $game)) {
     backdrop_goto('beergame/' . $game->id() . '/play');
   }
+  beergame_timer_check($game);
   $status_labels = beergame_status_labels();
   $settings = $game->engine()->getSettings();
 
+  $items = array(
+    t('Status: <strong id="beergame-status">@status</strong>', array('@status' => $status_labels[$game->status])),
+    t('Players are told the game lasts @announced weeks; it ends after week @end.', array('@announced' => $settings['announced_weeks'], '@end' => $settings['end_week'])),
+    beergame_demand_summary($game),
+  );
+  if ($settings['week_seconds']) {
+    $items[] = empty($game->settings['timer_running'])
+      ? t('Timer: @seconds seconds a week, not running.', array('@seconds' => $settings['week_seconds']))
+      : t('Timer: @seconds seconds a week, running.', array('@seconds' => $settings['week_seconds']));
+  }
   $build['summary'] = array(
     '#theme' => 'item_list',
-    '#items' => array(
-      t('Status: <strong id="beergame-status">@status</strong>', array('@status' => $status_labels[$game->status])),
-      t('Players are told the game lasts @announced weeks; it ends after week @end.', array('@announced' => $settings['announced_weeks'], '@end' => $settings['end_week'])),
-      beergame_demand_summary($game),
-    ),
+    '#items' => $items,
     '#attributes' => array('class' => array('beergame-summary')),
   );
   $build['controls'] = backdrop_get_form('beergame_control_form', $game);
@@ -659,6 +676,9 @@ function beergame_monitor_table(BeerGame $game) {
     $header[] = $label;
   }
   $header[] = t('Team cost');
+  if ($settings['week_seconds']) {
+    $header[] = t('Time left');
+  }
 
   $rows = array();
   foreach (beergame_teams_load($game) as $team) {
@@ -687,6 +707,15 @@ function beergame_monitor_table(BeerGame $game) {
       $row[] = $cell;
     }
     $row[] = $team->state ? '$' . number_format($cost, 2) : '-';
+    if ($settings['week_seconds']) {
+      $seconds_left = beergame_timer_seconds_left($game, $team);
+      if ($seconds_left !== NULL) {
+        $row[] = format_string('@minutes:@seconds', array('@minutes' => floor($seconds_left / 60), '@seconds' => sprintf('%02d', $seconds_left % 60)));
+      }
+      else {
+        $row[] = ($team->status == 'playing' && $game->status != 'finished') ? t('Not started') : '-';
+      }
+    }
     $rows[] = array(
       'data' => $row,
       'class' => array('beergame-team-' . $team->status),
@@ -735,6 +764,25 @@ function beergame_control_form($form, &$form_state, BeerGame $game) {
       );
       break;
   }
+  $week_seconds = $game->engine()->getSettings()['week_seconds'];
+  if ($week_seconds && in_array($game->status, array('running', 'paused'))) {
+    if (empty($game->settings['timer_running'])) {
+      $form['actions']['timer_start'] = array(
+        '#type' => 'submit',
+        '#value' => t('Start timer'),
+        '#submit' => array('beergame_control_form_timer_start'),
+        '#access' => $game->status == 'running',
+      );
+    }
+    else {
+      $form['actions']['timer_stop'] = array(
+        '#type' => 'submit',
+        '#value' => t('Stop timer'),
+        '#submit' => array('beergame_control_form_timer_stop'),
+        '#attributes' => array('class' => array('button-secondary')),
+      );
+    }
+  }
   if (in_array($game->status, array('running', 'paused'))) {
     $form['actions']['end'] = array(
       '#type' => 'submit',
@@ -773,6 +821,8 @@ function beergame_control_form_start($form, &$form_state) {
 function beergame_control_form_pause($form, &$form_state) {
   $game = $form_state['game'];
   $game->status = 'paused';
+  // Remembered so the timer can carry on from the same point on resume.
+  $game->settings['paused_at'] = REQUEST_TIME;
   $game->save();
   backdrop_set_message(t('The game is paused. Players cannot order until you resume.'));
 }
@@ -782,12 +832,39 @@ function beergame_control_form_pause($form, &$form_state) {
  */
 function beergame_control_form_resume($form, &$form_state) {
   $game = $form_state['game'];
+  if (!empty($game->settings['paused_at'])) {
+    // Give back the time the game spent paused.
+    db_update('beergame_team')
+      ->expression('deadline', 'deadline + :paused', array(':paused' => REQUEST_TIME - $game->settings['paused_at']))
+      ->condition('gid', $game->id())
+      ->condition('deadline', 0, '>')
+      ->execute();
+    unset($game->settings['paused_at']);
+  }
   $game->status = 'running';
   $game->save();
   foreach (beergame_teams_load($game) as $team) {
     beergame_team_advance($game, $team->tid);
   }
   backdrop_set_message(t('The game has resumed.'));
+}
+
+/**
+ * Submit handler: starts the week timer.
+ */
+function beergame_control_form_timer_start($form, &$form_state) {
+  $game = $form_state['game'];
+  beergame_timer_start($game);
+  $seconds = $game->engine()->getSettings()['week_seconds'];
+  backdrop_set_message(format_plural($seconds, 'The timer has started. Each team now has 1 second for every week.', 'The timer has started. Each team now has @count seconds for every week.'));
+}
+
+/**
+ * Submit handler: stops the week timer.
+ */
+function beergame_control_form_timer_stop($form, &$form_state) {
+  beergame_timer_stop($form_state['game']);
+  backdrop_set_message(t('The timer has stopped. Teams can take as long as they like.'));
 }
 
 /**
@@ -811,6 +888,7 @@ function beergame_control_form_end($form, &$form_state) {
  *   The game.
  */
 function beergame_monitor_callback(BeerGame $game) {
+  beergame_timer_check($game);
   $status_labels = beergame_status_labels();
   $table = beergame_monitor_table($game);
   return array(
@@ -851,6 +929,7 @@ function beergame_computer_takeover_callback(BeerGame $game, $tid, $role) {
  */
 function beergame_board_page(BeerGame $game) {
   global $user;
+  beergame_timer_check($game, beergame_person_position($game, $user->uid)->tid);
   $path = backdrop_get_path('module', 'beergame');
   $build['board'] = array(
     '#type' => 'container',
@@ -923,6 +1002,7 @@ function beergame_board_state(BeerGame $game, $uid) {
     'people' => $people,
     'ordered' => $ordered,
     'pendingOrder' => isset($team->positions[$role]->pending_order) ? (int) $team->positions[$role]->pending_order : NULL,
+    'secondsLeft' => beergame_timer_seconds_left($game, $team),
     'resultsUrl' => beergame_game_access('results', $game) ? url('beergame/' . $game->id() . '/results') : NULL,
     'position' => NULL,
     'history' => array(),
@@ -954,6 +1034,7 @@ function beergame_board_state(BeerGame $game, $uid) {
         'backlog' => (int) $row->backlog,
         'order' => (int) $row->order_placed,
         'cost' => (float) $row->cost,
+        'timedOut' => (bool) $row->timed_out,
       );
     }
   }
@@ -968,6 +1049,8 @@ function beergame_board_state(BeerGame $game, $uid) {
  */
 function beergame_board_state_callback(BeerGame $game) {
   backdrop_page_is_cacheable(FALSE);
+  $position = beergame_person_position($game, $GLOBALS['user']->uid);
+  beergame_timer_check($game, $position->tid);
   return beergame_board_state($game, $GLOBALS['user']->uid);
 }
 

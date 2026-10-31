@@ -37,9 +37,22 @@
     this.$board = $board;
     this.state = null;
     this.fingerprint = '';
+    this.deadline = null;
     this.build();
     this.update(options.initial);
     this.schedule();
+    var self = this;
+    window.setInterval(function () {
+      self.renderTimer();
+    }, 1000);
+  }
+
+  /**
+   * Formats a number of seconds as minutes and seconds.
+   */
+  function clock(seconds) {
+    var rest = seconds % 60;
+    return Math.floor(seconds / 60) + ':' + (rest < 10 ? '0' : '') + rest;
   }
 
   /**
@@ -52,6 +65,7 @@
     this.$header = $('<div class="beergame-board-header"></div>');
     this.$notice = $('<div class="beergame-notice" role="status" aria-live="polite"></div>');
     this.$weekTitle = $('<h2 class="beergame-week-title"></h2>');
+    this.$timer = $('<p class="beergame-timer" role="timer" hidden></p>');
     this.$week = $('<div class="beergame-week"></div>');
     this.$transit = $('<p class="beergame-transit"></p>');
 
@@ -74,7 +88,7 @@
 
     this.$history = $('<section class="beergame-panel beergame-history"></section>');
     // The current week, waiting for this player's order.
-    var $main = $('<section class="beergame-panel beergame-board-main"></section>').append(this.$weekTitle, this.$notice, this.$week, this.$transit, this.$form);
+    var $main = $('<section class="beergame-panel beergame-board-main"></section>').append(this.$weekTitle, this.$timer, this.$notice, this.$week, this.$transit, this.$form);
     this.$board.append(
       this.$header,
       $('<div class="beergame-board-layout"></div>').append($main, this.$history)
@@ -137,7 +151,15 @@
    *   Board data from beergame_board_state().
    */
   BeerGameBoard.prototype.update = function (state) {
-    var fingerprint = JSON.stringify(state);
+    // The countdown runs in the browser between updates.
+    this.deadline = state.secondsLeft === null ? null : Date.now() + state.secondsLeft * 1000;
+    this.secondsLeft = state.secondsLeft;
+    this.timerPaused = state.gameStatus !== 'running';
+    this.renderTimer();
+
+    // The time left changes on every update, so it does not count as a
+    // change worth redrawing the board for.
+    var fingerprint = JSON.stringify($.extend({}, state, {secondsLeft: null}));
     if (fingerprint === this.fingerprint) {
       return;
     }
@@ -149,7 +171,20 @@
     if (previous && previous.week !== state.week) {
       this.$input.val('');
       this.showError('');
-      this.$notice.text(t('New week: your teammates have all ordered.')).addClass('is-new');
+      var last = state.history[state.history.length - 1];
+      if (last && last.timedOut) {
+        this.$notice.text(t('Time ran out, so your order from the week before was repeated: @order.', {
+          '@order': Backdrop.formatPlural(last.order, '1 case', '@count cases')
+        })).addClass('is-new');
+      }
+      else if (previous.secondsLeft !== null) {
+        // With a timer, the week may have moved on because time ran out
+        // for a teammate.
+        this.$notice.text(t('A new week has started.')).addClass('is-new');
+      }
+      else {
+        this.$notice.text(t('New week: your teammates have all ordered.')).addClass('is-new');
+      }
     }
 
     this.$header.empty().append(
@@ -165,6 +200,24 @@
     this.renderTransit(state);
     this.renderForm(state);
     this.renderHistory(state);
+  };
+
+  /**
+   * Shows the time left this week, if the facilitator has started the timer.
+   */
+  BeerGameBoard.prototype.renderTimer = function () {
+    var t = Backdrop.t;
+    if (this.deadline === null) {
+      this.$timer.prop('hidden', true);
+      return;
+    }
+    var seconds = this.timerPaused ? this.secondsLeft : Math.max(0, Math.ceil((this.deadline - Date.now()) / 1000));
+    var text = seconds > 0 ? t('Time left: @time', {'@time': clock(seconds)}) : t('Time is up');
+    if (this.timerPaused) {
+      text += ' ' + t('(paused)');
+    }
+    this.$timer.prop('hidden', false).text(text)
+      .toggleClass('is-low', seconds <= 10);
   };
 
   /**
@@ -289,6 +342,11 @@
       [row.week, row.delivered, row.incomingOrder, row.shipped, row.inventory, row.backlog, row.order, money(row.cost)].forEach(function (value) {
         $row.append($('<td></td>').text(value));
       });
+      if (row.timedOut) {
+        // Mark orders that were repeated because time ran out.
+        $row.children().eq(6).addClass('is-timed-out').attr('title', t('Time ran out, so the previous order was repeated.'))
+          .append($('<span class="beergame-timed-out"></span>').text(' ' + t('(time ran out)')));
+      }
       $body.append($row);
     });
     this.$history.append($('<div class="beergame-table-scroll"></div>').append($table.append($body)));

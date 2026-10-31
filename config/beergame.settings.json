@@ -17,5 +17,6 @@
     "backlog_cost": 1,
     "announced_weeks": 50,
     "end_week": 40,
+    "week_seconds": 0,
     "poll_interval": 3
 }

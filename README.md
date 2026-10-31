@@ -34,6 +34,11 @@ Features
   preview of the demand pattern.
 - **Facilitator dashboard.** Watch every team week by week, then start, pause,
   resume or end the game.
+- **Optional week timer.** Set a number of seconds per week, then start the
+  timer from the dashboard whenever the group is ready (for example, after a
+  few untimed practice weeks). Players see a countdown. Anyone who has not
+  ordered when time runs out repeats their previous order, and their history
+  notes that time ran out. Pausing the game pauses the timer.
 - **Results and debrief.** Charts of orders, inventory and costs for every
   position, a cost ranking of teams, and a comparison with an all-computer
   team playing the same demand.
@@ -86,6 +91,7 @@ Settings
 | Production delay            | 2 weeks     |
 | Inventory cost              | 0.50 per case per week |
 | Backlog cost                | 1.00 per case per week |
+| Seconds per week (timer)    | 0 (no timer) |
 
 Facilitators can change these for each game until it starts.
 

@@ -57,6 +57,18 @@
   font-weight: 400;
   color: var(--beergame-muted);
 }
+.beergame-timer {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin: 0 0 0.5rem;
+}
+.beergame-timer.is-low {
+  color: var(--beergame-alert);
+}
+.beergame-timed-out {
+  font-size: 0.75rem;
+  color: var(--beergame-muted);
+}
 .beergame-notice:empty {
   display: none;
 }

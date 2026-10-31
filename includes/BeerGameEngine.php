@@ -77,6 +77,7 @@ class BeerGameEngine {
       'backlog_cost' => 1.0,
       'announced_weeks' => 50,
       'end_week' => 40,
+      'week_seconds' => 0,
     );
   }
 
@@ -286,6 +287,24 @@ class BeerGameEngine {
       }
     }
     return $costs;
+  }
+
+  /**
+   * Returns the order placed for a person whose time ran out.
+   *
+   * They repeat their order from the previous week, or the steady order in
+   * the first week.
+   *
+   * @param array $state
+   *   The team state.
+   * @param string $role
+   *   The role to order for.
+   *
+   * @return int
+   *   The order quantity.
+   */
+  public function timeoutOrder(array $state, $role) {
+    return (int) $state['positions'][$role]['last_order'];
   }
 
   /**

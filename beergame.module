@@ -108,6 +108,9 @@ function beergame_menu() {
   );
   $items['beergame/%beergame_game/dashboard'] = array(
     'title' => 'Dashboard',
+    // Players are sent on to their board, so only facilitators see this tab.
+    'access callback' => 'beergame_game_access',
+    'access arguments' => array('update', 1),
     'type' => MENU_DEFAULT_LOCAL_TASK,
     'weight' => -10,
   );
@@ -195,6 +198,18 @@ function beergame_menu() {
     'file' => 'beergame.admin.inc',
   );
   return $items;
+}
+
+/**
+ * Implements hook_cron().
+ *
+ * Moves on teams whose time has run out while nobody is watching.
+ */
+function beergame_cron() {
+  $gids = db_query("SELECT gid FROM {beergame_game} WHERE status = 'running'")->fetchCol();
+  foreach (entity_load('beergame_game', $gids) as $game) {
+    beergame_timer_check($game);
+  }
 }
 
 /**
@@ -496,6 +511,7 @@ function beergame_team_load($tid) {
     return FALSE;
   }
   $team->state = empty($team->state) ? array() : unserialize($team->state, array('allowed_classes' => FALSE));
+  $team->deadline = (int) $team->deadline;
   $team->positions = array();
   foreach (array_keys(beergame_role_labels()) as $role) {
     $team->positions[$role] = (object) array('tid' => $team->tid, 'role' => $role, 'uid' => 0, 'pending_order' => NULL);
@@ -665,8 +681,11 @@ function beergame_place_order(BeerGame $game, $uid, $order, $week) {
  *   The game.
  * @param int $tid
  *   The team ID.
+ * @param string[] $timed_out
+ *   (optional) Roles whose order for the current week was placed because
+ *   their time ran out.
  */
-function beergame_team_advance(BeerGame $game, $tid) {
+function beergame_team_advance(BeerGame $game, $tid, array $timed_out = array()) {
   $engine = $game->engine();
   $settings = $engine->getSettings();
   while ($game->status == 'running') {
@@ -700,16 +719,21 @@ function beergame_team_advance(BeerGame $game, $tid) {
           'order_placed' => $orders[$role],
           'cost' => $values['cost_week'],
           'computer' => $team->positions[$role]->uid ? 0 : 1,
+          'timed_out' => in_array($role, $timed_out) ? 1 : 0,
         ))
         ->execute();
     }
+    // Only the first week played here can have timed out.
+    $timed_out = array();
 
     if ($team->week >= $settings['end_week']) {
       $team->status = 'finished';
+      $team->deadline = 0;
     }
     else {
       $team->state = $engine->advance($team->state, $orders);
       $team->week = $team->state['week'];
+      $team->deadline = beergame_timer_deadline($game);
     }
     foreach ($team->positions as $position) {
       $position->pending_order = NULL;
@@ -718,6 +742,140 @@ function beergame_team_advance(BeerGame $game, $tid) {
     module_invoke_all('beergame_week_completed', $game, $team);
   }
   beergame_game_check_finished($game);
+}
+
+/**
+ * Returns when time runs out for a week starting now.
+ *
+ * @param BeerGame $game
+ *   The game.
+ *
+ * @return int
+ *   A Unix timestamp, or 0 when the game's timer is not running.
+ */
+function beergame_timer_deadline(BeerGame $game) {
+  $settings = $game->engine()->getSettings();
+  if (empty($game->settings['timer_running']) || !$settings['week_seconds']) {
+    return 0;
+  }
+  return time() + $settings['week_seconds'];
+}
+
+/**
+ * Returns the seconds left in a team's current week.
+ *
+ * @param BeerGame $game
+ *   The game.
+ * @param object $team
+ *   The team.
+ *
+ * @return int|null
+ *   Seconds left, or NULL when no timer is running for the team. While the
+ *   game is paused, the time left when it was paused.
+ */
+function beergame_timer_seconds_left(BeerGame $game, $team) {
+  if (empty($game->settings['timer_running']) || !$team->deadline || $team->status != 'playing') {
+    return NULL;
+  }
+  $now = ($game->status == 'paused' && !empty($game->settings['paused_at'])) ? $game->settings['paused_at'] : time();
+  return max(0, $team->deadline - $now);
+}
+
+/**
+ * Starts the week timer for every team in a running game.
+ *
+ * Each team gets a full week's time from now.
+ *
+ * @param BeerGame $game
+ *   The game.
+ */
+function beergame_timer_start(BeerGame $game) {
+  $game->settings['timer_running'] = TRUE;
+  $game->save();
+  db_update('beergame_team')
+    ->fields(array('deadline' => beergame_timer_deadline($game)))
+    ->condition('gid', $game->id())
+    ->condition('status', 'playing')
+    ->execute();
+}
+
+/**
+ * Stops the week timer, so teams can take as long as they like.
+ *
+ * @param BeerGame $game
+ *   The game.
+ */
+function beergame_timer_stop(BeerGame $game) {
+  $game->settings['timer_running'] = FALSE;
+  $game->save();
+  db_update('beergame_team')
+    ->fields(array('deadline' => 0))
+    ->condition('gid', $game->id())
+    ->execute();
+}
+
+/**
+ * Places orders for anyone in a game whose time has run out.
+ *
+ * Called whenever boards or the dashboard check for updates, and on cron.
+ *
+ * @param BeerGame $game
+ *   The game.
+ * @param int $tid
+ *   (optional) Only check this team.
+ */
+function beergame_timer_check(BeerGame $game, $tid = NULL) {
+  if ($game->status != 'running' || empty($game->settings['timer_running'])) {
+    return;
+  }
+  $query = db_select('beergame_team', 't')
+    ->fields('t', array('tid'))
+    ->condition('gid', $game->id())
+    ->condition('status', 'playing')
+    ->condition('deadline', 0, '>')
+    ->condition('deadline', time(), '<=');
+  if ($tid) {
+    $query->condition('tid', $tid);
+  }
+  foreach ($query->execute()->fetchCol() as $expired_tid) {
+    beergame_team_time_out($game, $expired_tid);
+  }
+}
+
+/**
+ * Places orders for everyone on a team who ran out of time this week.
+ *
+ * Each of them repeats their previous order, and the week moves on.
+ *
+ * @param BeerGame $game
+ *   The game.
+ * @param int $tid
+ *   The team ID.
+ */
+function beergame_team_time_out(BeerGame $game, $tid) {
+  $transaction = db_transaction();
+  try {
+    // Lock the team so an order arriving now cannot also advance the week.
+    db_query('SELECT tid FROM {beergame_team} WHERE tid = :tid FOR UPDATE', array(':tid' => $tid));
+    $team = beergame_team_load($tid);
+    if ($team->status != 'playing' || !$team->deadline || $team->deadline > time()) {
+      return;
+    }
+    $engine = $game->engine();
+    $timed_out = array();
+    foreach ($team->positions as $role => $position) {
+      if ($position->uid && !isset($position->pending_order)) {
+        $position->pending_order = $engine->timeoutOrder($team->state, $role);
+        $timed_out[] = $role;
+      }
+    }
+    beergame_team_save($team);
+    beergame_team_advance($game, $tid, $timed_out);
+  }
+  catch (Exception $e) {
+    $transaction->rollback();
+    watchdog_exception('beergame', $e);
+  }
 }
 
 /**
