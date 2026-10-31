@@ -67,6 +67,10 @@
     this.$notice = $('<div class="beergame-notice" role="status" aria-live="polite"></div>');
     this.$weekTitle = $('<h2 class="beergame-week-title"></h2>');
     this.$timer = $('<p class="beergame-timer" role="timer" hidden></p>');
+    this.$timerControl = $('<button type="button" class="beergame-timer-control" hidden></button>');
+    this.$timerControl.on('click', function () {
+      self.toggleTimer();
+    });
     this.$week = $('<div class="beergame-week"></div>');
     this.$transit = $('<p class="beergame-transit"></p>');
 
@@ -89,7 +93,7 @@
 
     this.$history = $('<section class="beergame-panel beergame-history"></section>');
     // The current week, waiting for this player's order.
-    var $main = $('<section class="beergame-panel beergame-board-main"></section>').append(this.$weekTitle, this.$timer, this.$notice, this.$week, this.$transit, this.$form);
+    var $main = $('<section class="beergame-panel beergame-board-main"></section>').append(this.$weekTitle, this.$timer, this.$timerControl, this.$notice, this.$week, this.$transit, this.$form);
     this.$board.append(
       this.$header,
       $('<div class="beergame-board-layout"></div>').append($main, this.$history)
@@ -143,6 +147,41 @@
   };
 
   /**
+   * Starts or stops the week timer, for facilitators who also play.
+   */
+  BeerGameBoard.prototype.toggleTimer = function () {
+    var self = this;
+    var control = this.options.timerControl;
+    this.$timerControl.prop('disabled', true);
+    $.post(control.url, {
+      timer: this.state.timerRunning ? 'stop' : 'start',
+      token: control.token
+    }, null, 'json').done(function (response) {
+      self.update(response.state);
+    }).always(function () {
+      self.$timerControl.prop('disabled', false);
+    });
+  };
+
+  /**
+   * Shows the Start timer or Stop timer button to facilitators.
+   */
+  BeerGameBoard.prototype.renderTimerControl = function (state) {
+    var t = Backdrop.t;
+    var control = this.options.timerControl;
+    var running = state.timerRunning;
+    if (!control || state.handedOver || !(running || state.gameStatus === 'running')) {
+      this.$timerControl.prop('hidden', true);
+      return;
+    }
+    this.$timerControl.prop('hidden', false)
+      .toggleClass('is-running', running)
+      .attr('title', running ? t('Stop the timer for every team, so people can take as long as they like.') : t('Give every team a full week of time, starting now.'))
+      .html(control.icons[running ? 'stop' : 'start'] || '')
+      .append(document.createTextNode(running ? t('Stop timer') : t('Start timer')));
+  };
+
+  /**
    * Shows an error under the order field.
    */
   BeerGameBoard.prototype.showError = function (message) {
@@ -161,6 +200,7 @@
     this.secondsLeft = state.secondsLeft;
     this.timerPaused = state.gameStatus !== 'running';
     this.renderTimer();
+    this.renderTimerControl(state);
 
     // The time left changes on every update, so it does not count as a
     // change worth redrawing the board for.

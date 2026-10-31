@@ -632,7 +632,8 @@
   justify-content: space-between;
   gap: 0.4rem 1rem;
 }
-.beergame-motion-toggle {
+.beergame-motion-toggle,
+.beergame-timer-control {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -646,9 +647,23 @@
   cursor: pointer;
 }
 .beergame-motion-toggle:hover,
-.beergame-motion-toggle:focus-visible {
+.beergame-motion-toggle:focus-visible,
+.beergame-timer-control:hover,
+.beergame-timer-control:focus-visible {
   border-color: var(--beergame-muted);
 }
 .beergame-motion-toggle[aria-pressed="false"] {
   color: var(--beergame-muted);
+}
+
+/* Start or stop the timer, for facilitators who also play. */
+.beergame-timer-control {
+  justify-self: start;
+  margin: 0 0 0.5rem;
+}
+.beergame-timer-control[hidden] {
+  display: none;
+}
+.beergame-timer-control.is-running {
+  color: var(--beergame-alert);
 }

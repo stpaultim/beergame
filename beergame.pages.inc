@@ -976,6 +976,15 @@ function beergame_board_page(BeerGame $game) {
         'orderUrl' => url('beergame/' . $game->id() . '/order'),
         'token' => backdrop_get_token('beergame-order-' . $game->id()),
         'animations' => (bool) $game->engine()->getSettings()['animations'],
+        // Facilitators who also play can start and stop the timer from here.
+        'timerControl' => beergame_game_access('update', $game) && $game->engine()->getSettings()['week_seconds'] ? array(
+          'url' => url('beergame/' . $game->id() . '/timer'),
+          'token' => backdrop_get_token('beergame-timer-' . $game->id()),
+          'icons' => array(
+            'start' => icon('timer', array('attributes' => array('width' => 18, 'height' => 18, 'aria-hidden' => 'true'))),
+            'stop' => icon('stop-circle', array('attributes' => array('width' => 18, 'height' => 18, 'aria-hidden' => 'true'))),
+          ),
+        ) : NULL,
         'orderChart' => (bool) $game->engine()->getSettings()['order_chart'],
         'motionIcons' => array(
           'on' => icon('pause-circle', array('attributes' => array('width' => 18, 'height' => 18, 'aria-hidden' => 'true'))),
@@ -1249,6 +1258,7 @@ function beergame_board_state(BeerGame $game, $uid) {
     'positionStatus' => $team_status,
     'pendingOrder' => isset($team->positions[$role]->pending_order) ? (int) $team->positions[$role]->pending_order : NULL,
     'secondsLeft' => $position->former ? NULL : beergame_timer_seconds_left($game, $team),
+    'timerRunning' => !empty($game->settings['timer_running']),
     // The person's position was handed to the computer or someone else.
     'handedOver' => $position->former,
     'resultsUrl' => beergame_game_access('results', $game) ? url('beergame/' . $game->id() . '/results') : NULL,
@@ -1328,6 +1338,33 @@ function beergame_order_callback(BeerGame $game) {
   return array(
     'ok' => $result === TRUE,
     'message' => $result === TRUE ? '' : $result,
+    'state' => beergame_board_state(beergame_game_load($game->id()), $user->uid),
+  );
+}
+
+/**
+ * Page callback: starts or stops the week timer from a facilitator's board.
+ *
+ * @param BeerGame $game
+ *   The game.
+ *
+ * @return array|int
+ *   The updated board data, or MENU_ACCESS_DENIED.
+ */
+function beergame_timer_callback(BeerGame $game) {
+  global $user;
+  backdrop_page_is_cacheable(FALSE);
+  if ($_SERVER['REQUEST_METHOD'] != 'POST' || !isset($_POST['token']) || !backdrop_valid_token($_POST['token'], 'beergame-timer-' . $game->id())) {
+    return MENU_ACCESS_DENIED;
+  }
+  $action = isset($_POST['timer']) ? $_POST['timer'] : '';
+  if ($action == 'start' && $game->status == 'running' && $game->engine()->getSettings()['week_seconds'] && empty($game->settings['timer_running'])) {
+    beergame_timer_start($game);
+  }
+  elseif ($action == 'stop' && !empty($game->settings['timer_running'])) {
+    beergame_timer_stop($game);
+  }
+  return array(
     'state' => beergame_board_state(beergame_game_load($game->id()), $user->uid),
   );
 }

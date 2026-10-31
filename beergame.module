@@ -172,6 +172,15 @@ function beergame_menu() {
     'type' => MENU_CALLBACK,
     'file' => 'beergame.pages.inc',
   );
+  $items['beergame/%beergame_game/timer'] = array(
+    'page callback' => 'beergame_timer_callback',
+    'page arguments' => array(1),
+    'delivery callback' => 'backdrop_json_deliver',
+    'access callback' => 'beergame_game_access',
+    'access arguments' => array('update', 1),
+    'type' => MENU_CALLBACK,
+    'file' => 'beergame.pages.inc',
+  );
   $items['beergame/%beergame_game/monitor'] = array(
     'page callback' => 'beergame_monitor_callback',
     'page arguments' => array(1),

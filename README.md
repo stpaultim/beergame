@@ -42,7 +42,9 @@ Features
   timer from the dashboard whenever the group is ready (for example, after a
   few untimed practice weeks). Players see a countdown. Anyone who has not
   ordered when time runs out repeats their previous order, and their history
-  notes that time ran out. Pausing the game pauses the timer.
+  notes that time ran out. The timer can be stopped and started again at any
+  time, for example to answer questions; a facilitator who is also playing can
+  do this from their own board.
 - **Results and debrief.** Charts of orders, inventory and costs for every
   position, a cost ranking of teams, and a comparison with an all-computer
   team playing the same demand.
