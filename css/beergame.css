@@ -36,7 +36,9 @@
 .beergame-board-header {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  /* Centered rather than baseline-aligned: the role heading starts with an
+     icon, which would otherwise set the baseline. */
+  align-items: center;
   gap: 0.25rem 0.75rem;
 }
 .beergame-board-header .beergame-role {
@@ -494,7 +496,7 @@
   color: var(--beergame-muted);
   white-space: nowrap;
 }
-.beergame-chain-link span {
+.beergame-chain-link > span {
   display: flex;
   align-items: center;
   gap: 0.15rem;
@@ -511,3 +513,49 @@
   color: var(--beergame-muted);
 }
 
+/* A new week: the order and the beer that just reached the player. */
+.beergame-chain-link > span,
+.beergame-chain-note {
+  position: relative;
+  border-radius: 999px;
+  padding: 0 0.25rem;
+}
+.beergame-chain-orders.is-flowing,
+.beergame-chain-beer.is-flowing,
+.beergame-chain-note.is-flowing {
+  background: color-mix(in srgb, var(--beergame-factory) 25%, transparent);
+  color: var(--beergame-text);
+  animation: beergame-flow 1.2s ease-in-out 3;
+}
+.beergame-chain .beergame-chain-flow {
+  position: absolute;
+  z-index: 1;
+  inset-block-end: 100%;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--beergame-text);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+@keyframes beergame-flow {
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--beergame-factory) 35%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .beergame-chain-orders.is-flowing,
+  .beergame-chain-beer.is-flowing,
+  .beergame-chain-note.is-flowing {
+    animation: none;
+  }
+}
+
+.beergame-chain .beergame-chain-beer .beergame-chain-flow,
+.beergame-chain .beergame-chain-note .beergame-chain-flow {
+  inset-block-end: auto;
+  inset-block-start: 100%;
+}

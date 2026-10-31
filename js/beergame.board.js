@@ -198,6 +198,10 @@
       }
     }
 
+    if (previous && previous.week !== state.week && state.position) {
+      this.animateChain(state);
+    }
+
     this.$header.empty().append(
       // The icon markup comes from the server's icon().
       $('<h2 class="beergame-role"></h2>').html(this.options.roleIcon || '').append(document.createTextNode(state.roleLabel)),
@@ -212,6 +216,43 @@
     this.renderTransit(state);
     this.renderForm(state);
     this.renderHistory(state);
+  };
+
+  /**
+   * Lights up the supply chain where this week's beer and order came in.
+   *
+   * The order arrives from the position below the player, and the beer from
+   * the position above (or from the brewhouse, for the factory).
+   */
+  BeerGameBoard.prototype.animateChain = function (state) {
+    var t = Backdrop.t;
+    var $chain = $('.beergame-chain');
+    if (!$chain.length) {
+      return;
+    }
+    var flows = [
+      {
+        $target: $chain.find('.beergame-chain-link[data-upstream="' + state.role + '"] .beergame-chain-orders'),
+        text: t('@count ordered', {'@count': state.position.incomingOrder})
+      },
+      {
+        $target: state.role === 'factory' ?
+          $chain.find('.beergame-chain-factory .beergame-chain-note') :
+          $chain.find('.beergame-chain-link[data-downstream="' + state.role + '"] .beergame-chain-beer'),
+        text: t('@count arrived', {'@count': state.position.delivered})
+      }
+    ];
+    window.clearTimeout(this.chainTimer);
+    $chain.find('.beergame-chain-flow').remove();
+    $chain.find('.is-flowing').removeClass('is-flowing');
+    flows.forEach(function (flow) {
+      flow.$target.addClass('is-flowing')
+        .append($('<span class="beergame-chain-flow"></span>').text(flow.text));
+    });
+    this.chainTimer = window.setTimeout(function () {
+      $chain.find('.beergame-chain-flow').remove();
+      $chain.find('.is-flowing').removeClass('is-flowing');
+    }, 4000);
   };
 
   /**

@@ -1129,7 +1129,7 @@ function beergame_supply_chain(BeerGame $game, $role) {
     if ($previous) {
       // Customers buy straight from the shop, so that link has no delays.
       $delayed = $previous != 'customers';
-      $items[] = '<li class="beergame-chain-link" aria-hidden="true">'
+      $items[] = '<li class="beergame-chain-link" aria-hidden="true" data-downstream="' . $previous . '" data-upstream="' . $key . '">'
         . '<span class="beergame-chain-orders">' . t('orders') . ' ' . $icon('arrow-right', 16) . ($delayed ? ' <small>' . $weeks($settings['order_delay']) . '</small>' : '') . '</span>'
         . '<span class="beergame-chain-beer">' . $icon('arrow-left', 16) . ' ' . t('beer') . ($delayed ? ' <small>' . $weeks($settings['shipping_delay']) . '</small>' : '') . '</span>'
         . '</li>';
