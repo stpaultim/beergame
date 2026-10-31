@@ -313,3 +313,14 @@ function beergame_update_1102() {
     $config->save();
   }
 }
+
+/**
+ * Add a setting for showing players a chart of their orders.
+ */
+function beergame_update_1103() {
+  $config = config('beergame.settings');
+  if ($config->get('order_chart') === NULL) {
+    $config->set('order_chart', 0);
+    $config->save();
+  }
+}

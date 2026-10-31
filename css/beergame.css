@@ -344,6 +344,14 @@
 .beergame-line.beergame-series-distributor { stroke: var(--beergame-distributor); }
 .beergame-line.beergame-series-factory { stroke: var(--beergame-factory); }
 .beergame-line.beergame-series-demand { stroke: var(--beergame-demand); }
+.beergame-swatch.beergame-series-orders-in { background: var(--beergame-muted); }
+.beergame-swatch.beergame-series-orders-out { background: var(--beergame-wholesaler); }
+.beergame-line.beergame-series-orders-in { stroke: var(--beergame-muted); stroke-dasharray: 4 3; }
+.beergame-line.beergame-series-orders-out { stroke: var(--beergame-wholesaler); }
+.beergame-order-chart .beergame-chart {
+  margin-bottom: 0.75rem;
+  max-width: none;
+}
 .beergame-crosshair {
   stroke: var(--beergame-muted);
   stroke-width: 1;

@@ -79,6 +79,7 @@ class BeerGameEngine {
       'end_week' => 40,
       'week_seconds' => 0,
       'animations' => 1,
+      'order_chart' => 0,
     );
   }
 

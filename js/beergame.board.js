@@ -524,11 +524,16 @@
    */
   BeerGameBoard.prototype.renderHistory = function (state) {
     var t = Backdrop.t;
+    if (this.$orderChart) {
+      // Keep the chart's hover handlers, which empty() would remove.
+      this.$orderChart.detach();
+    }
     this.$history.empty().append($('<h2></h2>').text(t('Past weeks')));
     if (!state.history.length) {
       this.$history.append($('<p></p>').text(t('Your past weeks will appear here.')));
       return;
     }
+    this.renderOrderChart(state);
     var $table = $('<table class="beergame-history-table"></table>');
     var $head = $('<tr></tr>');
     [t('Week'), t('Received'), t('Order in'), t('Shipped'), t('Inventory'), t('Backlog'), t('Ordered'), t('Cost')].forEach(function (label) {
@@ -556,6 +561,35 @@
       $body.append($row);
     });
     this.$history.append($('<div class="beergame-table-scroll"></div>').append($table.append($body)));
+  };
+
+  /**
+   * Draws the orders a player received against the orders they placed.
+   *
+   * Only shown when the facilitator turns it on for the game. The chart is
+   * kept between polls and only redrawn when a week is added, so hovering
+   * over it is not interrupted.
+   */
+  BeerGameBoard.prototype.renderOrderChart = function (state) {
+    var t = Backdrop.t;
+    if (!this.options.orderChart || !Backdrop.beergameChart) {
+      return;
+    }
+    if (!this.$orderChart || this.orderChartWeeks !== state.history.length) {
+      this.orderChartWeeks = state.history.length;
+      this.$orderChart = $('<div class="beergame-order-chart"></div>');
+      Backdrop.beergameChart.lineChart(this.$orderChart[0], {
+        title: t('Orders in and out'),
+        weekLabel: t('Week'),
+        width: 480,
+        height: 170,
+        series: [
+          {key: 'orders-in', label: t('Order in'), values: state.history.map(function (row) { return row.incomingOrder; })},
+          {key: 'orders-out', label: t('You ordered'), values: state.history.map(function (row) { return row.order; })}
+        ]
+      });
+    }
+    this.$history.append(this.$orderChart);
   };
 
 })(jQuery);

@@ -268,6 +268,12 @@ function beergame_settings_elements(array $settings) {
     '#description' => t('A truck brings each player\'s beer and an envelope carries their order. Players can still turn animations off for themselves.'),
     '#default_value' => $settings['animations'],
   );
+  $elements['board']['order_chart'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Show each player a chart of their orders'),
+    '#description' => t('A small chart above Past weeks compares the orders a player receives with the orders they place. It makes swings easy to spot during play, which can take some of the surprise out of the debrief.'),
+    '#default_value' => $settings['order_chart'],
+  );
 
   $elements['starting'] = array(
     '#type' => 'fieldset',
@@ -958,6 +964,7 @@ function beergame_board_page(BeerGame $game) {
     '#attributes' => array('id' => 'beergame-board', 'class' => array('beergame-board')),
     'loading' => array('#markup' => '<p>' . t('Loading your position…') . '</p>'),
   );
+  $build['#attached']['js'][] = $path . '/js/beergame.chart.js';
   $build['#attached']['js'][] = $path . '/js/beergame.board.js';
   $build['#attached']['js'][] = $path . '/js/beergame.story.js';
   $build['#attached']['library'][] = array('system', 'jquery.once');
@@ -969,6 +976,7 @@ function beergame_board_page(BeerGame $game) {
         'orderUrl' => url('beergame/' . $game->id() . '/order'),
         'token' => backdrop_get_token('beergame-order-' . $game->id()),
         'animations' => (bool) $game->engine()->getSettings()['animations'],
+        'orderChart' => (bool) $game->engine()->getSettings()['order_chart'],
         'motionIcons' => array(
           'on' => icon('pause-circle', array('attributes' => array('width' => 18, 'height' => 18, 'aria-hidden' => 'true'))),
           'off' => icon('play-circle', array('attributes' => array('width' => 18, 'height' => 18, 'aria-hidden' => 'true'))),
