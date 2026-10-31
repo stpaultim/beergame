@@ -4,6 +4,7 @@
  */
 
 .beergame-board,
+.beergame-chain,
 .beergame-charts,
 .beergame-chart,
 .beergame-monitor-table {
@@ -39,9 +40,16 @@
   gap: 0.25rem 0.75rem;
 }
 .beergame-board-header .beergame-role {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0;
+}
+.beergame-role-icon {
+  flex: none;
+  color: var(--beergame-factory);
 }
 .beergame-board-header .beergame-meta {
   color: var(--beergame-muted);
@@ -356,3 +364,150 @@
   align-items: center;
   gap: 0.35rem;
 }
+
+/* The story that introduces a player to their role. The theme styles the
+   details element and its summary, including the open and closed marker. */
+.beergame-story {
+  margin: 0 0 0.75rem;
+}
+.beergame-story-body {
+  display: grid;
+  gap: 0.5rem 1.5rem;
+  padding: 0.75rem;
+}
+@media (min-width: 48rem) {
+  .beergame-story-body {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+  /* The facts sit beside both the story and its button. */
+  .beergame-story-facts {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}
+.beergame-story-text p {
+  margin: 0 0 0.6rem;
+}
+.beergame-story-facts h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1rem;
+}
+.beergame-story-facts dl {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+}
+.beergame-story-fact {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 0.5rem;
+  font-size: 0.9rem;
+}
+.beergame-story-fact svg {
+  grid-row: span 2;
+  margin-top: 0.1rem;
+  color: var(--color-primary, currentColor);
+}
+.beergame-story-fact dt {
+  font-weight: 700;
+}
+.beergame-story-fact dd {
+  margin: 0;
+}
+
+/* The supply chain, with the player's own position highlighted. */
+.beergame-chain {
+  margin: 0 0 0.75rem;
+}
+.beergame-chain-list {
+  display: flex;
+  align-items: stretch;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0;
+  /* Room for the "You" tag above the player's position. */
+  padding: 0.75rem 0 0.25rem;
+  overflow-x: auto;
+}
+.beergame-chain-node {
+  position: relative;
+  display: flex;
+  flex: 1 0 5.5rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0.6rem 0.4rem;
+  background: var(--beergame-surface);
+  border: 1px solid var(--beergame-border);
+  border-radius: 8px;
+  color: var(--beergame-muted);
+  text-align: center;
+}
+.beergame-chain-retailer {
+  --beergame-accent: var(--beergame-retailer);
+}
+.beergame-chain-wholesaler {
+  --beergame-accent: var(--beergame-wholesaler);
+}
+.beergame-chain-distributor {
+  --beergame-accent: var(--beergame-distributor);
+}
+.beergame-chain-factory {
+  --beergame-accent: var(--beergame-factory);
+}
+.beergame-chain-node svg {
+  color: var(--beergame-accent, var(--beergame-muted));
+}
+.beergame-chain-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--beergame-text);
+}
+.beergame-chain-note {
+  font-size: 0.75rem;
+}
+.beergame-chain-node.is-you {
+  border: 2px solid var(--beergame-accent);
+  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--beergame-accent) 10%, transparent);
+}
+.beergame-chain-you {
+  position: absolute;
+  inset-block-start: -0.6rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--beergame-accent);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.beergame-chain-link {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.2rem;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--beergame-muted);
+  white-space: nowrap;
+}
+.beergame-chain-link span {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+.beergame-chain-orders svg {
+  color: var(--beergame-muted);
+}
+.beergame-chain-beer svg {
+  color: var(--beergame-factory);
+}
+.beergame-chain-caption {
+  margin: 0.3rem 0 0;
+  font-size: 0.85rem;
+  color: var(--beergame-muted);
+}
+

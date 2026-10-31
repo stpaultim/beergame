@@ -199,7 +199,8 @@
     }
 
     this.$header.empty().append(
-      $('<h2 class="beergame-role"></h2>').text(state.roleLabel),
+      // The icon markup comes from the server's icon().
+      $('<h2 class="beergame-role"></h2>').html(this.options.roleIcon || '').append(document.createTextNode(state.roleLabel)),
       $('<p class="beergame-meta"></p>').text(state.teamName)
     );
     this.$weekTitle.empty().append(

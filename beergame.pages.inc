@@ -938,12 +938,17 @@ function beergame_board_page(BeerGame $game) {
   global $user;
   beergame_timer_check($game, beergame_person_position($game, $user->uid, TRUE)->tid);
   $path = backdrop_get_path('module', 'beergame');
+  $position = beergame_person_position($game, $user->uid, TRUE);
+  $team = beergame_team_load($position->tid);
+  $build['story'] = beergame_story($game, $position->role, $team->name);
+  $build['chain'] = beergame_supply_chain($game, $position->role);
   $build['board'] = array(
     '#type' => 'container',
     '#attributes' => array('id' => 'beergame-board', 'class' => array('beergame-board')),
     'loading' => array('#markup' => '<p>' . t('Loading your position…') . '</p>'),
   );
   $build['#attached']['js'][] = $path . '/js/beergame.board.js';
+  $build['#attached']['js'][] = $path . '/js/beergame.story.js';
   $build['#attached']['library'][] = array('system', 'jquery.once');
   $build['#attached']['js'][] = array(
     'type' => 'setting',
@@ -952,12 +957,204 @@ function beergame_board_page(BeerGame $game) {
         'stateUrl' => url('beergame/' . $game->id() . '/board-state'),
         'orderUrl' => url('beergame/' . $game->id() . '/order'),
         'token' => backdrop_get_token('beergame-order-' . $game->id()),
+        'roleIcon' => icon('beer-stein-fill', array('attributes' => array('width' => 28, 'height' => 28, 'class' => array('beergame-role-icon'), 'aria-hidden' => 'true'))),
         'pollInterval' => (int) config_get('beergame.settings', 'poll_interval') * 1000,
         'initial' => beergame_board_state($game, $user->uid),
       ),
     ),
   );
   return $build;
+}
+
+/**
+ * Builds the story that introduces a player to their role.
+ *
+ * The story uses the game's own settings, so the delays and costs it
+ * describes are the ones the player will meet. It says nothing about customer
+ * demand or when the game really ends, which would give the game away.
+ *
+ * @param BeerGame $game
+ *   The game.
+ * @param string $role
+ *   The player's role.
+ * @param string $team_name
+ *   The player's team (brewery) name.
+ *
+ * @return array
+ *   A render array.
+ */
+function beergame_story(BeerGame $game, $role, $team_name) {
+  $settings = $game->engine()->getSettings();
+  $role_labels = beergame_role_labels();
+  $weeks = function ($count) {
+    return format_plural($count, '1 week', '@count weeks');
+  };
+  $money = function ($amount) {
+    return '$' . number_format($amount, 2);
+  };
+  $roles = BeerGameEngine::ROLES;
+  $index = array_search($role, $roles);
+  $downstream = $index > 0 ? backdrop_strtolower($role_labels[$roles[$index - 1]]) : '';
+  $upstream = $role != 'factory' ? backdrop_strtolower($role_labels[$roles[$index + 1]]) : '';
+
+  // The story: who the player is and what they decide.
+  $story = array();
+  $story[] = t('Welcome to @team. Your beer reaches thirsty customers through a chain of four businesses: the factory brews it, the distributor and wholesaler pass it along, and the retailer sells it. Beer moves down the chain; orders move up.', array('@team' => $team_name));
+  switch ($role) {
+    case 'retailer':
+      $story[] = t('You run the shop. Customers buy from you every week, and you are the only one who sees how much they buy. You order from the wholesaler.');
+      $story[] = t('Each week, beer arrives, customers come in, and you sell what you can.');
+      break;
+
+    case 'factory':
+      $story[] = t('You run the factory. The distributor orders from you, and you decide how much to brew. You never see the customers, only the distributor\'s orders.');
+      $story[] = t('Each week, fresh beer comes out of the brewhouse, a new order comes in, and you ship what you can.');
+      break;
+
+    default:
+      $story[] = t('You run the @role. The @downstream orders from you, and you order from the @upstream. You never see the customers, only the @downstream\'s orders.', array(
+        '@role' => $role == 'wholesaler' ? t('wholesale warehouse') : t('distribution centre'),
+        '@downstream' => $downstream,
+        '@upstream' => $upstream,
+      ));
+      $story[] = t('Each week, beer arrives, a new order comes in, and you ship what you can.');
+  }
+  $story[count($story) - 1] .= ' ' . t('Then you make your one decision:') . ' <strong>' . ($role == 'factory' ? t('how many cases to brew.') : t('how many cases to order.')) . '</strong>';
+  $story[] = t('Your team wins by keeping the total cost of all four businesses as low as possible.');
+
+  // The facts the player will need while playing.
+  $facts = array();
+  if ($role == 'factory') {
+    $facts['clock'] = array(t('Delays'), t('Brewing takes @total: @request for your decision to reach the brewhouse, then @brewing to brew.', array(
+      '@total' => $weeks($settings['production_request_delay'] + $settings['production_delay']),
+      '@request' => $weeks($settings['production_request_delay']),
+      '@brewing' => $weeks($settings['production_delay']),
+    )));
+  }
+  else {
+    $facts['clock'] = array(t('Delays'), t('Orders take @order to reach the @upstream. Beer takes @shipping more to reach you, or longer if they run out.', array(
+      '@order' => $weeks($settings['order_delay']),
+      '@shipping' => $weeks($settings['shipping_delay']),
+      '@upstream' => $upstream,
+    )));
+  }
+  $facts['coins'] = array(t('Inventory cost'), t('@holding a week for each case in your inventory.', array(
+    '@holding' => $money($settings['holding_cost']),
+  )));
+  $facts['warning'] = array(t('Backlog penalty'), t('@backlog a week for each case you owe but cannot ship yet. Your backlog is shipped first, as soon as beer arrives.', array(
+    '@backlog' => $money($settings['backlog_cost']),
+  )));
+  $start_values = array(
+    '@inventory' => $settings['starting_inventory'],
+    '@pipeline' => $settings['pipeline_initial'],
+    '@demand' => $settings['demand_initial'],
+    '@downstream' => $downstream,
+  );
+  switch ($role) {
+    case 'retailer':
+      $start = $settings['demand_initial'] == $settings['pipeline_initial']
+        ? t('You start with @inventory cases in inventory. At first, @pipeline cases a week arrive, and customers buy the same.', $start_values)
+        : t('You start with @inventory cases in inventory. At first, @pipeline cases a week arrive, and customers buy @demand a week.', $start_values);
+      break;
+
+    case 'factory':
+      $start = t('You start with @inventory cases in inventory. At first, @pipeline cases a week finish brewing and are ordered from you, until the @downstream\'s own orders reach you.', $start_values);
+      break;
+
+    default:
+      $start = t('You start with @inventory cases in inventory. At first, @pipeline cases a week arrive and are ordered from you, until the @downstream\'s own orders reach you.', $start_values);
+  }
+  $facts['package'] = array(t('Start'), $start);
+  $facts['calendar'] = array(t('Length'), $weeks($settings['announced_weeks']) . '.');
+  if ($settings['week_seconds']) {
+    $facts['timer'] = array(t('Time limit'), format_plural($settings['week_seconds'], 'Your facilitator may allow 1 second a week. If time runs out, last week\'s order is repeated.', 'Your facilitator may allow @count seconds a week. If time runs out, last week\'s order is repeated.'));
+  }
+
+  $markup = '<div class="beergame-story-text">';
+  foreach ($story as $paragraph) {
+    $markup .= '<p>' . $paragraph . '</p>';
+  }
+  $markup .= '</div><div class="beergame-story-facts"><h3>' . t('Good to know') . '</h3><dl>';
+  foreach ($facts as $icon => $fact) {
+    $markup .= '<div class="beergame-story-fact">'
+      . icon($icon, array('attributes' => array('width' => 20, 'height' => 20, 'aria-hidden' => 'true')))
+      . '<dt>' . $fact[0] . '</dt><dd>' . $fact[1] . '</dd></div>';
+  }
+  $markup .= '</dl></div>';
+
+  return array(
+    '#type' => 'markup',
+    '#markup' => '<details class="beergame-story" open data-beergame-story="' . $game->id() . '">'
+      . '<summary class="beergame-story-summary">' . t('How to play: @role', array('@role' => $role_labels[$role])) . '</summary>'
+      . '<div class="beergame-story-body">' . $markup
+      . '<div class="beergame-story-actions"><button type="button" class="button beergame-story-close">' . t('Got it') . '</button></div>'
+      . '</div></details>',
+  );
+}
+
+/**
+ * Builds the picture of the supply chain, with the player's position marked.
+ *
+ * Orders travel from the customers up to the factory, and beer travels back
+ * down. Each link is labelled with how long orders and beer take to cross it.
+ *
+ * @param BeerGame $game
+ *   The game.
+ * @param string $role
+ *   The player's role.
+ *
+ * @return array
+ *   A render array.
+ */
+function beergame_supply_chain(BeerGame $game, $role) {
+  $settings = $game->engine()->getSettings();
+  $role_labels = beergame_role_labels();
+  $icon = function ($name, $size = 28) {
+    return icon($name, array('attributes' => array('width' => $size, 'height' => $size, 'aria-hidden' => 'true')));
+  };
+  $weeks = function ($count) {
+    return format_plural($count, '1 wk', '@count wk');
+  };
+  $nodes = array(
+    'customers' => array('label' => t('Customers'), 'icon' => 'users-three'),
+    'retailer' => array('label' => $role_labels['retailer'], 'icon' => 'storefront'),
+    'wholesaler' => array('label' => $role_labels['wholesaler'], 'icon' => 'warehouse'),
+    'distributor' => array('label' => $role_labels['distributor'], 'icon' => 'truck'),
+    'factory' => array('label' => $role_labels['factory'], 'icon' => 'factory'),
+  );
+
+  $items = array();
+  $previous = NULL;
+  foreach ($nodes as $key => $node) {
+    if ($previous) {
+      // Customers buy straight from the shop, so that link has no delays.
+      $delayed = $previous != 'customers';
+      $items[] = '<li class="beergame-chain-link" aria-hidden="true">'
+        . '<span class="beergame-chain-orders">' . t('orders') . ' ' . $icon('arrow-right', 16) . ($delayed ? ' <small>' . $weeks($settings['order_delay']) . '</small>' : '') . '</span>'
+        . '<span class="beergame-chain-beer">' . $icon('arrow-left', 16) . ' ' . t('beer') . ($delayed ? ' <small>' . $weeks($settings['shipping_delay']) . '</small>' : '') . '</span>'
+        . '</li>';
+    }
+    $classes = array('beergame-chain-node', 'beergame-chain-' . $key);
+    $you = '';
+    if ($key == $role) {
+      $classes[] = 'is-you';
+      $you = '<span class="beergame-chain-you">' . t('You') . '</span>';
+    }
+    $note = '';
+    if ($key == 'factory') {
+      $note = '<small class="beergame-chain-note">' . t('brews in @time', array('@time' => $weeks($settings['production_request_delay'] + $settings['production_delay']))) . '</small>';
+    }
+    $items[] = '<li class="' . implode(' ', $classes) . '">' . $you . $icon($nodes[$key]['icon']) . '<span class="beergame-chain-label">' . $node['label'] . '</span>' . $note . '</li>';
+    $previous = $key;
+  }
+
+  return array(
+    '#type' => 'markup',
+    '#markup' => '<figure class="beergame-chain">'
+      . '<ol class="beergame-chain-list">' . implode('', $items) . '</ol>'
+      . '<figcaption class="beergame-chain-caption">' . t('Orders travel up the chain, from customers to the factory. Beer travels back down. You are the @role.', array('@role' => backdrop_strtolower($role_labels[$role]))) . '</figcaption>'
+      . '</figure>',
+  );
 }
 
 /**

@@ -18,6 +18,10 @@ the game.
 Features
 --------
 
+- **A story for every role.** Each player's board opens with a short story
+  that explains their part of the supply chain, the delays and the costs,
+  using the game's own settings. Players can fold it away once read and
+  reopen it at any time.
 - **Several teams per game.** Each team is its own supply chain with its own
   brewery name, and teams compete on total cost.
 - **People play with their site accounts.** The facilitator assigns people to
