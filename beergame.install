@@ -156,10 +156,18 @@ function beergame_schema() {
         'not null' => FALSE,
         'description' => 'Order placed for the current week, NULL if not yet placed.',
       ),
+      'former_uid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The person who played before the computer or someone else took over, so they can still follow the game.',
+      ),
     ),
     'primary key' => array('tid', 'role'),
     'indexes' => array(
       'uid' => array('uid'),
+      'former_uid' => array('former_uid'),
     ),
   );
 
@@ -274,5 +282,23 @@ function beergame_update_1100() {
   if ($config->get('week_seconds') === NULL) {
     $config->set('week_seconds', 0);
     $config->save();
+  }
+}
+
+/**
+ * Let people whose position was handed over keep following the game.
+ */
+function beergame_update_1101() {
+  if (!db_field_exists('beergame_position', 'former_uid')) {
+    $field = array(
+      'type' => 'int',
+      'unsigned' => TRUE,
+      'not null' => TRUE,
+      'default' => 0,
+      'description' => 'The person who played before the computer or someone else took over, so they can still follow the game.',
+    );
+    db_add_field('beergame_position', 'former_uid', $field, array(
+      'indexes' => array('former_uid' => array('former_uid')),
+    ));
   }
 }

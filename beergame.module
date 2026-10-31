@@ -222,6 +222,10 @@ function beergame_user_delete($account) {
     ->fields(array('uid' => 0, 'pending_order' => NULL))
     ->condition('uid', $account->uid)
     ->execute();
+  db_update('beergame_position')
+    ->fields(array('former_uid' => 0))
+    ->condition('former_uid', $account->uid)
+    ->execute();
 }
 
 /**
@@ -271,7 +275,8 @@ function beergame_game_access($op, BeerGame $game, $account = NULL) {
   }
   $manage = user_access('administer beer games', $account)
     || ($account->uid && $account->uid == $game->uid && user_access('facilitate beer games', $account));
-  $play = user_access('play beer games', $account) && beergame_person_position($game, $account->uid);
+  // People whose position was handed over can still follow the game.
+  $play = user_access('play beer games', $account) && beergame_person_position($game, $account->uid, TRUE);
 
   switch ($op) {
     case 'update':
@@ -514,7 +519,7 @@ function beergame_team_load($tid) {
   $team->deadline = (int) $team->deadline;
   $team->positions = array();
   foreach (array_keys(beergame_role_labels()) as $role) {
-    $team->positions[$role] = (object) array('tid' => $team->tid, 'role' => $role, 'uid' => 0, 'pending_order' => NULL);
+    $team->positions[$role] = (object) array('tid' => $team->tid, 'role' => $role, 'uid' => 0, 'pending_order' => NULL, 'former_uid' => 0);
   }
   $result = db_query('SELECT * FROM {beergame_position} WHERE tid = :tid', array(':tid' => $tid));
   foreach ($result as $position) {
@@ -544,6 +549,7 @@ function beergame_team_save($team) {
       ->fields(array(
         'uid' => (int) $position->uid,
         'pending_order' => isset($position->pending_order) ? (int) $position->pending_order : NULL,
+        'former_uid' => empty($position->former_uid) ? 0 : (int) $position->former_uid,
       ))
       ->execute();
   }
@@ -568,21 +574,37 @@ function beergame_team_delete($tid) {
  *   The game.
  * @param int $uid
  *   The person's user ID.
+ * @param bool $include_former
+ *   (optional) Also find a position the person used to play, before it was
+ *   handed to the computer or someone else. Defaults to FALSE.
  *
  * @return object|false
- *   An object with tid and role properties, or FALSE.
+ *   An object with tid and role properties, and a former property that is
+ *   TRUE when the person no longer plays the position; or FALSE.
  */
-function beergame_person_position(BeerGame $game, $uid) {
+function beergame_person_position(BeerGame $game, $uid, $include_former = FALSE) {
   $positions = &backdrop_static(__FUNCTION__, array());
   if (!$uid || !$game->id()) {
     return FALSE;
   }
   $key = $game->id() . ':' . $uid;
   if (!isset($positions[$key])) {
-    $positions[$key] = db_query('SELECT p.tid, p.role FROM {beergame_position} p INNER JOIN {beergame_team} t ON t.tid = p.tid WHERE t.gid = :gid AND p.uid = :uid', array(
+    $positions[$key] = db_query('SELECT p.tid, p.role, 0 AS former FROM {beergame_position} p INNER JOIN {beergame_team} t ON t.tid = p.tid WHERE t.gid = :gid AND p.uid = :uid', array(
       ':gid' => $game->id(),
       ':uid' => $uid,
     ))->fetchObject();
+    if (!$positions[$key]) {
+      $positions[$key] = db_query_range('SELECT p.tid, p.role, 1 AS former FROM {beergame_position} p INNER JOIN {beergame_team} t ON t.tid = p.tid WHERE t.gid = :gid AND p.former_uid = :uid', 0, 1, array(
+        ':gid' => $game->id(),
+        ':uid' => $uid,
+      ))->fetchObject();
+    }
+    if ($positions[$key]) {
+      $positions[$key]->former = (bool) $positions[$key]->former;
+    }
+  }
+  if ($positions[$key] && $positions[$key]->former && !$include_former) {
+    return FALSE;
   }
   return $positions[$key];
 }
@@ -912,6 +934,9 @@ function beergame_position_to_computer(BeerGame $game, $tid, $role) {
   if (!$team || $team->gid != $game->id() || !isset($team->positions[$role])) {
     return;
   }
+  if ($team->positions[$role]->uid) {
+    $team->positions[$role]->former_uid = $team->positions[$role]->uid;
+  }
   $team->positions[$role]->uid = 0;
   $team->positions[$role]->pending_order = NULL;
   beergame_team_save($team);
@@ -958,7 +983,7 @@ function beergame_team_history($tid, $role = NULL) {
  */
 function beergame_position_player_name($position) {
   if (!$position->uid) {
-    return t('Computer');
+    return t('Autoplay');
   }
   $account = user_load($position->uid);
   return $account ? user_format_name($account) : t('Unknown');

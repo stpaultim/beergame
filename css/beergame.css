@@ -65,7 +65,7 @@
 .beergame-timer.is-low {
   color: var(--beergame-alert);
 }
-.beergame-timed-out {
+.beergame-order-note {
   font-size: 0.75rem;
   color: var(--beergame-muted);
 }

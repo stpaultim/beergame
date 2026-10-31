@@ -24,10 +24,10 @@ Features
   positions by username; no join codes are needed.
 - **Self-paced weeks.** A team moves on to the next week as soon as every
   person on it has placed an order, so fast teams are not held up by slow ones.
-- **Computer players.** Empty positions are played by the computer, and the
-  facilitator can hand a position to the computer if someone drops out.
-  Computer players follow Sterman's anchoring and adjustment rule, which
-  imitates how people typically play.
+- **Autoplay.** Empty positions are played automatically, and the facilitator
+  can turn on autoplay for a position if someone drops out. That person can
+  still watch their position and see the results. Autoplay follows Sterman's
+  anchoring and adjustment rule, which imitates how people typically play.
 - **Demand scenarios.** Classic step, steady growth, seasonal wave, promotion
   spike, noisy steady, random drift, or "Surprise me", which picks one at
   random and keeps it secret until the results. The settings forms show a live
@@ -67,7 +67,7 @@ Running a game
    **Play Beer Games** permission.
 2. Go to **Beer Game** (`/beergame`) and click **Create a game**.
 3. Choose the number of teams, name each team's brewery, and enter a username
-   for each position. Leave a position empty to have the computer play it.
+   for each position. Leave a position empty to have autoplay play it.
 4. Adjust the game settings if you like: demand scenario, game length,
    starting stock, delays and costs. The defaults follow the classic game.
 5. Open the game's **Dashboard** and click **Start game**. Players go to

@@ -49,15 +49,18 @@ function beergame_list_page() {
     . ' (SELECT SUM(l.cost) FROM {beergame_log} l WHERE l.tid = p.tid) AS team_cost,'
     . ' (SELECT MAX(l.week) FROM {beergame_log} l WHERE l.tid = p.tid) AS weeks_played'
     . ' FROM {beergame_position} p INNER JOIN {beergame_team} t ON t.tid = p.tid INNER JOIN {beergame_game} g ON g.gid = t.gid'
-    . ' WHERE p.uid = :uid ORDER BY g.created DESC';
-  $result = db_query($query, array(':uid' => $user->uid));
+    // Include positions handed over to the computer or someone else, so the
+    // person can still follow the game and see the results.
+    . ' WHERE p.uid = :uid OR (p.former_uid = :former_uid AND NOT EXISTS (SELECT 1 FROM {beergame_position} p2 INNER JOIN {beergame_team} t2 ON t2.tid = p2.tid WHERE t2.gid = g.gid AND p2.uid = :current_uid))'
+    . ' ORDER BY g.created DESC';
+  $result = db_query($query, array(':uid' => $user->uid, ':former_uid' => $user->uid, ':current_uid' => $user->uid));
   $rows = array();
   foreach ($result as $record) {
     $game = beergame_game_load($record->gid);
     $links = array();
-    if ($game->status != 'setup') {
-      $links[] = l(t('Play'), 'beergame/' . $game->gid . '/play');
-    }
+    // Before the game starts, the board waits and comes alive when the
+    // facilitator starts it.
+    $links[] = l(t('Play'), 'beergame/' . $game->gid . '/play');
     if (beergame_game_access('results', $game)) {
       $links[] = l(t('Results'), 'beergame/' . $game->gid . '/results');
     }
@@ -411,7 +414,7 @@ function beergame_game_form($form, &$form_state, BeerGame $game) {
   );
   $form['teams']['help'] = array(
     '#type' => 'help',
-    '#markup' => t('Enter the username of the person playing each position. Leave a position blank and the computer will play it. People need the "Play Beer Games" permission.'),
+    '#markup' => t('Enter the username of the person playing each position. Leave a position blank to have autoplay play it. People need the "Play Beer Games" permission.'),
   );
   for ($i = 0; $i < $team_count; $i++) {
     $team = isset($teams[$i]) ? $teams[$i] : NULL;
@@ -443,7 +446,7 @@ function beergame_game_form($form, &$form_state, BeerGame $game) {
         '#default_value' => $default,
         '#autocomplete_path' => 'beergame/autocomplete',
         '#maxlength' => 60,
-        '#attributes' => array('placeholder' => t('Computer')),
+        '#attributes' => array('placeholder' => t('Autoplay')),
       );
     }
   }
@@ -547,12 +550,16 @@ function beergame_game_form_submit($form, &$form_state) {
     else {
       $team = (object) array('gid' => $game->id(), 'week' => 0, 'status' => 'ready', 'state' => array(), 'positions' => array());
       foreach (array_keys(beergame_role_labels()) as $role) {
-        $team->positions[$role] = (object) array('uid' => 0, 'pending_order' => NULL);
+        $team->positions[$role] = (object) array('uid' => 0, 'pending_order' => NULL, 'former_uid' => 0);
       }
     }
     $team->name = $values['name'];
     foreach ($form_state['beergame_uids'][$i] as $role => $uid) {
       if ($team->positions[$role]->uid != $uid) {
+        if ($team->positions[$role]->uid && $team->status != 'ready') {
+          // Let the person who played so far keep following the game.
+          $team->positions[$role]->former_uid = $team->positions[$role]->uid;
+        }
         $team->positions[$role]->uid = $uid;
         $team->positions[$role]->pending_order = NULL;
       }
@@ -699,7 +706,7 @@ function beergame_monitor_table(BeerGame $game) {
         else {
           $cell .= ' <span class="beergame-badge beergame-badge-waiting">' . icon('hourglass', array('attributes' => array('width' => 16, 'height' => 16))) . t('Deciding') . '</span>';
         }
-        $cell .= '<br>' . l(t('Hand to computer'), 'beergame/' . $game->id() . '/computer/' . $team->tid . '/' . $role, array(
+        $cell .= '<br>' . l(t('Turn on autoplay'), 'beergame/' . $game->id() . '/computer/' . $team->tid . '/' . $role, array(
           'query' => array('token' => backdrop_get_token('beergame-computer-' . $team->tid . '-' . $role)),
           'attributes' => array('class' => array('beergame-takeover')),
         ));
@@ -917,7 +924,7 @@ function beergame_computer_takeover_callback(BeerGame $game, $tid, $role) {
     return MENU_NOT_FOUND;
   }
   beergame_position_to_computer($game, $tid, $role);
-  backdrop_set_message(t('The computer is now playing @role.', array('@role' => $labels[$role])));
+  backdrop_set_message(t('Autoplay is now playing @role.', array('@role' => $labels[$role])));
   backdrop_goto('beergame/' . $game->id());
 }
 
@@ -929,7 +936,7 @@ function beergame_computer_takeover_callback(BeerGame $game, $tid, $role) {
  */
 function beergame_board_page(BeerGame $game) {
   global $user;
-  beergame_timer_check($game, beergame_person_position($game, $user->uid)->tid);
+  beergame_timer_check($game, beergame_person_position($game, $user->uid, TRUE)->tid);
   $path = backdrop_get_path('module', 'beergame');
   $build['board'] = array(
     '#type' => 'container',
@@ -968,7 +975,7 @@ function beergame_board_page(BeerGame $game) {
  *   Board data for beergame.board.js.
  */
 function beergame_board_state(BeerGame $game, $uid) {
-  $position = beergame_person_position($game, $uid);
+  $position = beergame_person_position($game, $uid, TRUE);
   $team = beergame_team_load($position->tid);
   $role = $position->role;
   $settings = $game->engine()->getSettings();
@@ -1002,7 +1009,9 @@ function beergame_board_state(BeerGame $game, $uid) {
     'people' => $people,
     'ordered' => $ordered,
     'pendingOrder' => isset($team->positions[$role]->pending_order) ? (int) $team->positions[$role]->pending_order : NULL,
-    'secondsLeft' => beergame_timer_seconds_left($game, $team),
+    'secondsLeft' => $position->former ? NULL : beergame_timer_seconds_left($game, $team),
+    // The person's position was handed to the computer or someone else.
+    'handedOver' => $position->former,
     'resultsUrl' => beergame_game_access('results', $game) ? url('beergame/' . $game->id() . '/results') : NULL,
     'position' => NULL,
     'history' => array(),
@@ -1035,6 +1044,7 @@ function beergame_board_state(BeerGame $game, $uid) {
         'order' => (int) $row->order_placed,
         'cost' => (float) $row->cost,
         'timedOut' => (bool) $row->timed_out,
+        'computer' => (bool) $row->computer,
       );
     }
   }
@@ -1049,7 +1059,7 @@ function beergame_board_state(BeerGame $game, $uid) {
  */
 function beergame_board_state_callback(BeerGame $game) {
   backdrop_page_is_cacheable(FALSE);
-  $position = beergame_person_position($game, $GLOBALS['user']->uid);
+  $position = beergame_person_position($game, $GLOBALS['user']->uid, TRUE);
   beergame_timer_check($game, $position->tid);
   return beergame_board_state($game, $GLOBALS['user']->uid);
 }

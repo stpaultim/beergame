@@ -103,6 +103,10 @@
     window.setTimeout(function () {
       $.getJSON(self.options.stateUrl).done(function (state) {
         self.update(state);
+      }).fail(function (xhr) {
+        if (xhr.status === 403) {
+          self.showError(Backdrop.t('You no longer have a place in this game. Please ask your facilitator.'));
+        }
       }).always(function () {
         if (self.state && self.state.teamStatus !== 'finished' && self.state.gameStatus !== 'finished') {
           self.schedule();
@@ -168,7 +172,14 @@
     this.state = state;
     var t = Backdrop.t;
 
-    if (previous && previous.week !== state.week) {
+    if (state.handedOver) {
+      if (previous && !previous.handedOver) {
+        this.$input.val('');
+        this.showError('');
+        this.$notice.text(t('Your facilitator has turned on autoplay for your position.')).addClass('is-new');
+      }
+    }
+    else if (previous && previous.week !== state.week) {
       this.$input.val('');
       this.showError('');
       var last = state.history[state.history.length - 1];
@@ -280,7 +291,7 @@
    */
   BeerGameBoard.prototype.renderForm = function (state) {
     var t = Backdrop.t;
-    var canOrder = state.position && state.gameStatus === 'running' && state.teamStatus === 'playing' && state.pendingOrder === null;
+    var canOrder = state.position && !state.handedOver && state.gameStatus === 'running' && state.teamStatus === 'playing' && state.pendingOrder === null;
     this.$orderLabel.text(state.role === 'factory' ?
       t('Cases to brew') :
       t('Order from @who', {'@who': state.upstreamLabel}));
@@ -302,6 +313,9 @@
         return;
       }
       message += ' ' + t('Your facilitator will share the results.');
+    }
+    else if (state.handedOver) {
+      message = t('Autoplay is now placing your orders. You can watch how it plays here, and see the results when the game ends.');
     }
     else if (state.gameStatus === 'paused') {
       message = t('Your facilitator has paused the game.');
@@ -342,10 +356,17 @@
       [row.week, row.delivered, row.incomingOrder, row.shipped, row.inventory, row.backlog, row.order, money(row.cost)].forEach(function (value) {
         $row.append($('<td></td>').text(value));
       });
-      if (row.timedOut) {
-        // Mark orders that were repeated because time ran out.
-        $row.children().eq(6).addClass('is-timed-out').attr('title', t('Time ran out, so the previous order was repeated.'))
-          .append($('<span class="beergame-timed-out"></span>').text(' ' + t('(time ran out)')));
+      // Mark orders the person did not place themselves.
+      var note = null;
+      if (row.computer) {
+        note = {text: t('(autoplay)'), title: t('Autoplay placed this order.')};
+      }
+      else if (row.timedOut) {
+        note = {text: t('(time ran out)'), title: t('Time ran out, so the previous order was repeated.')};
+      }
+      if (note) {
+        $row.children().eq(6).attr('title', note.title)
+          .append($('<span class="beergame-order-note"></span>').text(' ' + note.text));
       }
       $body.append($row);
     });
