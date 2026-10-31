@@ -92,9 +92,11 @@ Facilitators can change these for each game until it starts.
 Developers
 ----------
 
-The simulation lives in `includes/BeerGameEngine.php`. It has no Backdrop API
-calls, so it can be read and tested on its own. Tests are in the `tests`
-directory and run with Backdrop's testing module.
+The module uses Backdrop for accounts, permissions, storage, pages and forms.
+The game rules themselves are kept in `includes/BeerGameEngine.php`, which
+works on plain PHP arrays with no Backdrop calls, so the rules can be read on
+their own and unit-tested quickly. Tests are in the `tests` directory and run
+with Backdrop's testing module.
 
 Credits
 -------
