@@ -53,6 +53,14 @@ function beergame_list_page() {
     // person can still follow the game and see the results.
     . ' WHERE p.uid = :uid OR (p.former_uid = :former_uid AND NOT EXISTS (SELECT 1 FROM {beergame_position} p2 INNER JOIN {beergame_team} t2 ON t2.tid = p2.tid WHERE t2.gid = g.gid AND p2.uid = :current_uid))'
     . ' ORDER BY g.created DESC';
+  if (beergame_facilitator_access()) {
+    $facilitating = backdrop_get_form('beergame_facilitating_form');
+    // While confirming a deletion, show only the confirmation.
+    if (isset($facilitating['confirm'])) {
+      return $facilitating;
+    }
+  }
+
   $result = db_query($query, array(':uid' => $user->uid, ':former_uid' => $user->uid, ':current_uid' => $user->uid));
   $rows = array();
   foreach ($result as $record) {
@@ -91,33 +99,131 @@ function beergame_list_page() {
     );
   }
 
-  if (beergame_facilitator_access()) {
-    $query = db_select('beergame_game', 'g')
-      ->fields('g', array('gid'))
-      ->orderBy('created', 'DESC');
-    if (!user_access('administer beer games')) {
-      $query->condition('uid', $user->uid);
-    }
-    $rows = array();
-    foreach (entity_load('beergame_game', $query->execute()->fetchCol()) as $game) {
-      $team_count = db_query('SELECT COUNT(*) FROM {beergame_team} WHERE gid = :gid', array(':gid' => $game->gid))->fetchField();
-      $rows[] = array(
-        l($game->title, 'beergame/' . $game->gid),
-        $status_labels[$game->status],
-        $team_count,
-        format_date($game->created, 'short'),
-        l(t('Edit'), 'beergame/' . $game->gid . '/edit'),
-      );
-    }
-    $build['facilitating'] = array(
-      '#theme' => 'table',
-      '#caption' => t('Games you facilitate'),
-      '#header' => array(t('Game'), t('Status'), t('Teams'), t('Created'), t('Operations')),
-      '#rows' => $rows,
-      '#empty' => t('No games yet. <a href="@url">Create a game</a>.', array('@url' => url('beergame/add'))),
-    );
+  if (isset($facilitating)) {
+    $build['facilitating'] = $facilitating;
   }
   return $build;
+}
+
+/**
+ * Form constructor for the games a person facilitates.
+ *
+ * Lists the games with checkboxes so several can be deleted at once. After
+ * "Delete selected games" the form rebuilds as a confirmation step.
+ *
+ * @see beergame_facilitating_form_submit()
+ * @see beergame_facilitating_form_delete_submit()
+ */
+function beergame_facilitating_form($form, &$form_state) {
+  global $user;
+
+  if (!empty($form_state['delete_gids'])) {
+    $games = entity_load('beergame_game', $form_state['delete_gids']);
+    $items = array();
+    foreach ($games as $game) {
+      // Many games share the default title, so the date tells them apart.
+      $items[] = t('%title, created @created', array('%title' => $game->title, '@created' => format_date($game->created, 'short')));
+    }
+    $form['games'] = array(
+      '#theme' => 'item_list',
+      '#items' => $items,
+    );
+    $form['#submit'] = array('beergame_facilitating_form_delete_submit');
+    return confirm_form(
+      $form,
+      format_plural(count($games), 'Are you sure you want to delete this game?', 'Are you sure you want to delete these @count games?'),
+      'beergame',
+      t('All teams and their week-by-week results will be deleted. This cannot be undone.'),
+      t('Delete'),
+      t('Cancel')
+    );
+  }
+
+  $status_labels = beergame_status_labels();
+  $query = db_select('beergame_game', 'g')
+    ->fields('g', array('gid'))
+    ->orderBy('created', 'DESC');
+  if (!user_access('administer beer games')) {
+    $query->condition('uid', $user->uid);
+  }
+  $options = array();
+  foreach (entity_load('beergame_game', $query->execute()->fetchCol()) as $game) {
+    $team_count = db_query('SELECT COUNT(*) FROM {beergame_team} WHERE gid = :gid', array(':gid' => $game->gid))->fetchField();
+    $links = array(
+      l(t('Edit'), 'beergame/' . $game->gid . '/edit'),
+      l(t('Delete'), 'beergame/' . $game->gid . '/delete'),
+    );
+    $options[$game->gid] = array(
+      'title' => l($game->title, 'beergame/' . $game->gid),
+      'status' => $status_labels[$game->status],
+      'teams' => $team_count,
+      'created' => format_date($game->created, 'short'),
+      'operations' => implode(' · ', $links),
+    );
+  }
+
+  // Table select has no caption, so the heading stands in for it.
+  $form['heading'] = array(
+    '#markup' => '<h2>' . t('Games you facilitate') . '</h2>',
+  );
+  $form['games'] = array(
+    '#type' => 'tableselect',
+    '#header' => array(
+      'title' => t('Game'),
+      'status' => t('Status'),
+      'teams' => t('Teams'),
+      'created' => t('Created'),
+      'operations' => t('Operations'),
+    ),
+    '#options' => $options,
+    '#empty' => t('No games yet. <a href="@url">Create a game</a>.', array('@url' => url('beergame/add'))),
+  );
+  if ($options) {
+    $form['actions'] = array('#type' => 'actions');
+    $form['actions']['delete'] = array(
+      '#type' => 'submit',
+      '#value' => t('Delete selected games'),
+    );
+  }
+  return $form;
+}
+
+/**
+ * Form validation handler for beergame_facilitating_form().
+ */
+function beergame_facilitating_form_validate($form, &$form_state) {
+  if (empty($form_state['delete_gids']) && !array_filter($form_state['values']['games'])) {
+    form_set_error('games', t('Select at least one game to delete.'));
+  }
+}
+
+/**
+ * Form submission handler for beergame_facilitating_form().
+ *
+ * Moves on to the confirmation step with the selected games.
+ */
+function beergame_facilitating_form_submit($form, &$form_state) {
+  $form_state['delete_gids'] = array_keys(array_filter($form_state['values']['games']));
+  $form_state['rebuild'] = TRUE;
+}
+
+/**
+ * Form submission handler for the confirmation step of the games form.
+ */
+function beergame_facilitating_form_delete_submit($form, &$form_state) {
+  $gids = array();
+  // Check each game again, in case access changed since it was selected.
+  foreach (entity_load('beergame_game', $form_state['delete_gids']) as $game) {
+    if (beergame_game_access('delete', $game)) {
+      $gids[] = $game->gid;
+    }
+  }
+  if ($gids) {
+    entity_delete_multiple('beergame_game', $gids);
+    watchdog('beergame', 'Deleted @count games.', array('@count' => count($gids)));
+    backdrop_set_message(format_plural(count($gids), 'Deleted 1 game.', 'Deleted @count games.'));
+  }
+  $form_state['redirect'] = 'beergame';
 }
 
 /**
