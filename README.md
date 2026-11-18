@@ -37,7 +37,10 @@ Features
   random and keeps it secret until the results. The settings forms show a live
   preview of the demand pattern.
 - **Facilitator dashboard.** Watch every team week by week, then start, pause,
-  resume or end the game.
+  resume or end the game. Each position shows its inventory or backlog and
+  last order, and live charts show the orders and inventory of every team as
+  the game goes on. A "Hide game details" button hides all of this while you
+  share your screen with players.
 - **Optional week timer.** Set a number of seconds per week, then start the
   timer from the dashboard whenever the group is ready (for example, after a
   few untimed practice weeks). Players see a countdown. Anyone who has not

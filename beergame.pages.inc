@@ -756,7 +756,8 @@ function beergame_game_page(BeerGame $game) {
   $items = array(
     t('Status: <strong id="beergame-status">@status</strong>', array('@status' => $status_labels[$game->status])),
     t('Players are told the game lasts @announced weeks; it ends after week @end.', array('@announced' => $settings['announced_weeks'], '@end' => $settings['end_week'])),
-    beergame_demand_summary($game),
+    // Hidden along with the other game details while presenting.
+    array('data' => beergame_demand_summary($game), 'class' => array('beergame-detail')),
   );
   if ($settings['week_seconds']) {
     $items[] = empty($game->settings['timer_running'])
@@ -774,6 +775,11 @@ function beergame_game_page(BeerGame $game) {
     '#attributes' => array('id' => 'beergame-monitor'),
     'table' => beergame_monitor_table($game),
   );
+  $build['charts'] = array(
+    '#type' => 'container',
+    '#attributes' => array('id' => 'beergame-live-charts', 'class' => array('beergame-live-charts', 'beergame-detail')),
+  );
+  $build['#attached']['js'][] = backdrop_get_path('module', 'beergame') . '/js/beergame.chart.js';
   $build['#attached']['js'][] = backdrop_get_path('module', 'beergame') . '/js/beergame.dashboard.js';
   $build['#attached']['library'][] = array('system', 'jquery.once');
   $build['#attached']['js'][] = array(
@@ -782,6 +788,23 @@ function beergame_game_page(BeerGame $game) {
       'beergame' => array(
         'monitorUrl' => url('beergame/' . $game->id() . '/monitor'),
         'status' => $game->status,
+        'charts' => beergame_monitor_charts($game),
+        'roleLabels' => beergame_role_labels(),
+        'labels' => array(
+          'heading' => t('How the game is going'),
+          'orders' => t('Orders placed'),
+          'inventory' => t('Effective inventory (backlog shown below zero)'),
+          'customers' => t('Customers'),
+          'week' => t('Week'),
+          'empty' => t('Charts appear here once the first week has been played.'),
+          'hide' => t('Hide game details'),
+          'show' => t('Show game details'),
+          'hideTitle' => t('Hide customer demand, inventory, orders and charts, for example while sharing your screen with players.'),
+        ),
+        'hideIcons' => array(
+          'hide' => icon('eye-slash', array('attributes' => array('width' => 18, 'height' => 18, 'aria-hidden' => 'true'))),
+          'show' => icon('eye', array('attributes' => array('width' => 18, 'height' => 18, 'aria-hidden' => 'true'))),
+        ),
         'pollInterval' => (int) config_get('beergame.settings', 'poll_interval') * 1000,
       ),
     ),
@@ -833,6 +856,14 @@ function beergame_monitor_table(BeerGame $game) {
           'query' => array('token' => backdrop_get_token('beergame-computer-' . $team->tid . '-' . $role)),
           'attributes' => array('class' => array('beergame-takeover')),
         ));
+      }
+      if (!empty($team->state['positions'][$role])) {
+        $values = $team->state['positions'][$role];
+        $cell .= '<div class="beergame-detail beergame-position-detail">';
+        $cell .= $values['backlog']
+          ? '<span class="beergame-detail-backlog">' . t('Backlog @count', array('@count' => $values['backlog'])) . '</span>'
+          : t('Inventory @count', array('@count' => $values['inventory']));
+        $cell .= ' · ' . t('Last order @count', array('@count' => $values['last_order'])) . '</div>';
       }
       $row[] = $cell;
     }
@@ -1025,7 +1056,48 @@ function beergame_monitor_callback(BeerGame $game) {
     'status' => $game->status,
     'statusLabel' => $status_labels[$game->status],
     'html' => backdrop_render($table),
+    'charts' => beergame_monitor_charts($game),
   );
+}
+
+/**
+ * Collects each team's orders and inventory so far, for the live charts.
+ *
+ * @param BeerGame $game
+ *   The game.
+ *
+ * @return array
+ *   An array with:
+ *   - teams: one entry per team, with its tid, name, the number of weeks
+ *     played, and orders and effective inventory for each role.
+ *   - demand: customer orders for every week any team has played.
+ */
+function beergame_monitor_charts(BeerGame $game) {
+  $engine = $game->engine();
+  $roles = array_keys(beergame_role_labels());
+  $charts = array('teams' => array(), 'demand' => array());
+  $last_week = 0;
+  foreach (beergame_teams_load($game) as $team) {
+    $history = beergame_team_history($team->tid);
+    $chart = array('tid' => (int) $team->tid, 'name' => $team->name, 'weeks' => 0, 'orders' => array(), 'inventory' => array());
+    foreach ($roles as $role) {
+      $chart['orders'][$role] = array();
+      $chart['inventory'][$role] = array();
+      if (!empty($history[$role])) {
+        foreach ($history[$role] as $week => $log) {
+          $chart['orders'][$role][] = (int) $log->order_placed;
+          $chart['inventory'][$role][] = (int) $log->inventory - (int) $log->backlog;
+          $chart['weeks'] = max($chart['weeks'], (int) $week);
+        }
+      }
+    }
+    $last_week = max($last_week, $chart['weeks']);
+    $charts['teams'][] = $chart;
+  }
+  for ($week = 1; $week <= $last_week; $week++) {
+    $charts['demand'][] = $engine->demand($week);
+  }
+  return $charts;
 }
 
 /**

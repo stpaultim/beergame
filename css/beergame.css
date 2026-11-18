@@ -7,6 +7,8 @@
 .beergame-chain,
 .beergame-charts,
 .beergame-chart,
+.beergame-hide-row,
+.beergame-live-charts,
 .beergame-monitor-table {
   --beergame-surface: #fcfcfb;
   --beergame-border: #dcdbd6;
@@ -344,6 +346,8 @@
 .beergame-line.beergame-series-distributor { stroke: var(--beergame-distributor); }
 .beergame-line.beergame-series-factory { stroke: var(--beergame-factory); }
 .beergame-line.beergame-series-demand { stroke: var(--beergame-demand); }
+.beergame-swatch.beergame-series-customers { background: var(--beergame-muted); }
+.beergame-line.beergame-series-customers { stroke: var(--beergame-muted); stroke-dasharray: 4 3; }
 .beergame-swatch.beergame-series-orders-in { background: var(--beergame-muted); }
 .beergame-swatch.beergame-series-orders-out { background: var(--beergame-wholesaler); }
 .beergame-line.beergame-series-orders-in { stroke: var(--beergame-muted); stroke-dasharray: 4 3; }
@@ -633,7 +637,8 @@
   gap: 0.4rem 1rem;
 }
 .beergame-motion-toggle,
-.beergame-timer-control {
+.beergame-timer-control,
+.beergame-hide-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -649,7 +654,9 @@
 .beergame-motion-toggle:hover,
 .beergame-motion-toggle:focus-visible,
 .beergame-timer-control:hover,
-.beergame-timer-control:focus-visible {
+.beergame-timer-control:focus-visible,
+.beergame-hide-toggle:hover,
+.beergame-hide-toggle:focus-visible {
   border-color: var(--beergame-muted);
 }
 .beergame-motion-toggle[aria-pressed="false"] {
@@ -666,4 +673,43 @@
 }
 .beergame-timer-control.is-running {
   color: var(--beergame-alert);
+}
+
+/* Facilitator dashboard: details about each position, live charts, and a
+   switch to hide them while players can see the screen. */
+.beergame-hide-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 0.5rem;
+}
+.beergame-hide-toggle[aria-pressed="true"] {
+  color: var(--beergame-alert);
+}
+.beergame-hiding-details .beergame-detail {
+  display: none;
+}
+.beergame-position-detail {
+  font-size: 0.85rem;
+  color: var(--beergame-muted);
+  white-space: nowrap;
+}
+.beergame-detail-backlog {
+  color: var(--beergame-alert);
+  font-weight: 600;
+}
+.beergame-live-charts {
+  margin-top: 1.5rem;
+}
+.beergame-live-team {
+  margin: 0 0 0.75rem;
+}
+.beergame-live-team-charts {
+  display: grid;
+  gap: 0 1.5rem;
+  padding-top: 0.5rem;
+}
+@media (min-width: 60rem) {
+  .beergame-live-team-charts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
