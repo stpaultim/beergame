@@ -75,6 +75,9 @@ function beergame_menu() {
     'page callback' => 'beergame_list_page',
     'access callback' => 'beergame_list_access',
     'file' => 'beergame.pages.inc',
+    // A link in the main menu, added when the module is enabled and removed
+    // when it is uninstalled. Site Architects can move or disable it.
+    'menu_name' => 'main-menu',
   );
   $items['beergame/add'] = array(
     'title' => 'Create a game',
